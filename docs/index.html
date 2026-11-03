@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chroma: a color picker for macOS</title>
+  <meta name="description" content="Chroma is a free, open source color picker for macOS. Press ⌃⌥⌘P, click any pixel, and paste it as hex, CSS, SwiftUI, Tailwind, Compose and 30 more formats. Palettes, a Color Dock, a contrast checker and color blindness previews.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f7f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#15141c" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="assets/icon-256.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="canonical" href="https://nearbycoder.github.io/chroma/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Chroma">
+  <meta property="og:url" content="https://nearbycoder.github.io/chroma/">
+  <meta property="og:title" content="Chroma: a color picker for macOS">
+  <meta property="og:description" content="Free and open source. Pick any color on screen, keep palettes, check contrast and copy it in the format your code needs.">
+  <meta property="og:image" content="https://nearbycoder.github.io/chroma/assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Chroma icon beside its loupe magnifying the corner of a coral swatch">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://nearbycoder.github.io/chroma/assets/og.png">
+  <style>
+    :root {
+      --bg: #f7f5f2;
+      --surface: #fffefc;
+      --ink: #1f1d26;
+      --muted: #67636f;
+      --line: #e7e3dd;
+      --kbd: #f0ece6;
+      --button: #1f1d26;
+      --button-ink: #fffefc;
+      --rose: #ff4d6d;
+      --mint: #19b98c;
+      --blue: #4c6fff;
+      --wall: linear-gradient(150deg, #d9d2f3 0%, #f1d6dc 48%, #f6dfc6 100%);
+      --shadow: 0 1px 2px rgba(40, 30, 60, 0.06), 0 12px 32px rgba(40, 30, 60, 0.09);
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #15141c;
+        --surface: #1d1c25;
+        --ink: #eceaf1;
+        --muted: #a29fab;
+        --line: #2c2a35;
+        --kbd: #27252f;
+        --button: #eceaf1;
+        --button-ink: #15141c;
+        --mint: #3fdcae;
+        --wall: linear-gradient(150deg, #2b2847 0%, #3a2738 50%, #3d3127 100%);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px rgba(0, 0, 0, 0.35);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--font); -webkit-font-smoothing: antialiased; }
+    a { color: inherit; }
+    img { display: block; max-width: 100%; height: auto; }
+    .wrap { width: min(1100px, calc(100% - 40px)); margin: 0 auto; }
+
+    /* Header */
+    header.top .wrap { display: flex; align-items: center; gap: 28px; height: 68px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; }
+    .brand img { width: 28px; height: 28px; }
+    header.top nav { display: flex; gap: 24px; margin-left: auto; font-size: 15px; }
+    header.top nav a { color: var(--muted); text-decoration: none; }
+    header.top nav a:hover { color: var(--ink); }
+
+    .button { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 10px; border: 0; cursor: pointer;
+      background: var(--button); color: var(--button-ink); font: 500 16px var(--font); text-decoration: none; transition: transform .15s ease; }
+    .button:hover { transform: translateY(-1px); }
+    .button svg { width: 17px; height: 17px; }
+    .button.small { height: 34px; padding: 0 14px; font-size: 14px; border-radius: 8px; }
+
+    /* Hero */
+    .hero { text-align: center; padding: 64px 0 44px; }
+    .hero .icon { width: 104px; height: 104px; margin: 0 auto 20px; }
+    h1 { font-size: clamp(40px, 6vw, 62px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 600; margin: 0 auto 18px; max-width: 800px; text-wrap: balance; }
+    h1 span { display: block; color: var(--muted); }
+    .lede { font-size: 20px; color: var(--muted); max-width: 620px; margin: 0 auto 30px; text-wrap: pretty; }
+    .actions { display: flex; justify-content: center; align-items: center; gap: 22px; flex-wrap: wrap; }
+    .actions .link { color: var(--muted); text-decoration: none; }
+    .actions .link:hover { color: var(--ink); }
+    .fine { margin-top: 16px; font-size: 14px; color: var(--muted); }
+    kbd { font: 500 0.84em var(--font); padding: 1px 7px; border-radius: 6px; background: var(--kbd); border: 1px solid var(--line); white-space: nowrap; }
+    .spectrum { height: 4px; width: 120px; margin: 0 auto 26px; border-radius: 4px; background: linear-gradient(90deg, var(--rose), #ffb547, var(--mint), var(--blue), #a35bff); }
+
+    .wall { background: var(--wall); border-radius: 22px; padding: clamp(14px, 3.4vw, 40px); }
+    .shot { border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+    .shot img { width: 100%; }
+
+    /* Live demo */
+    .demo { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
+    .stage { position: relative; border-radius: 14px; overflow: hidden; cursor: none; touch-action: none; box-shadow: var(--shadow); aspect-ratio: 16 / 10; background: #222; user-select: none; -webkit-user-select: none; }
+    .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .stage .loupe { pointer-events: none; }
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    .picked { display: flex; gap: 12px; align-items: center; }
+    .picked .chip { width: 56px; height: 56px; border-radius: 12px; border: 1px solid rgba(0,0,0,.1); flex: none; }
+    .picked strong { display: block; font-size: 17px; }
+    .picked input { width: 100%; font: 14px var(--mono); color: var(--ink); background: var(--kbd); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; margin-top: 4px; }
+    .picked input:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+    .history { display: flex; gap: 6px; flex-wrap: wrap; min-height: 26px; }
+    .history button { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(0,0,0,.12); cursor: pointer; padding: 0; }
+    .label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+    .formats { display: flex; flex-direction: column; max-height: 320px; overflow: auto; margin: 0 -4px; }
+    .formats button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; background: none; border: 0; border-radius: 8px; padding: 6px 8px; cursor: pointer; color: var(--ink); font: inherit; min-width: 0; }
+    .formats button:hover { background: var(--kbd); }
+    .formats small { font-size: 11.5px; color: var(--muted); }
+    .formats code { font: 12.5px var(--mono); overflow-wrap: anywhere; }
+    .contrast-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .contrast-mini div { border-radius: 9px; padding: 8px 10px; font-size: 13px; border: 1px solid var(--line); }
+    .contrast-mini b { font-size: 20px; display: block; line-height: 1.2; }
+    .toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; background: var(--button); color: var(--button-ink); padding: 9px 16px; border-radius: 999px; font-size: 14px; transition: all .2s; pointer-events: none; z-index: 10; display: flex; gap: 8px; align-items: center; }
+    .toast.on { opacity: 1; transform: translate(-50%, 0); }
+    .toast i { width: 14px; height: 14px; border-radius: 50%; display: block; border: 1px solid rgba(255,255,255,.5); }
+    .demo-caption { margin-top: 12px; font-size: 15px; color: var(--muted); }
+
+    /* Sections */
+    section { padding: 104px 0 0; }
+    .head { text-align: center; max-width: 660px; margin: 0 auto 44px; }
+    h2 { font-size: clamp(30px, 4vw, 40px); letter-spacing: -0.025em; line-height: 1.12; font-weight: 600; margin: 0 0 12px; text-wrap: balance; }
+    .head p { color: var(--muted); margin: 0; font-size: 18px; text-wrap: pretty; }
+
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .feature { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 24px; }
+    .feature .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 14px; background: var(--tint); color: var(--tone); }
+    .feature .ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .feature h3 { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 15.5px; }
+    .rose   { --tint: #fde2e7; --tone: #c42347; }
+    .amber  { --tint: #fbecd3; --tone: #a6620a; }
+    .mint   { --tint: #d8f3ea; --tone: #10805f; }
+    .blue   { --tint: #e0e6fd; --tone: #3150d6; }
+    .violet { --tint: #ebe2fc; --tone: #6c3fd1; }
+    .slate  { --tint: #ebe8e4; --tone: #55514b; }
+    @media (prefers-color-scheme: dark) {
+      .rose   { --tint: #3b2028; --tone: #ff8fa3; }
+      .amber  { --tint: #3a2f1e; --tone: #f0bd6e; }
+      .mint   { --tint: #183530; --tone: #6fe2c0; }
+      .blue   { --tint: #1f2742; --tone: #9bb0ff; }
+      .violet { --tint: #2b2342; --tone: #c3a8ff; }
+      .slate  { --tint: #2a2930; --tone: #c6c2bb; }
+    }
+
+    /* Gallery */
+    .tabs { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; padding: 0; list-style: none; }
+    .tabs button { font: 500 14px var(--font); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+    .tabs button[aria-selected="true"] { background: var(--button); color: var(--button-ink); border-color: var(--button); }
+    .gallery .wall { display: grid; place-items: center; min-height: 420px; }
+    .gallery figure { margin: 0; display: none; }
+    .gallery figure.on { display: block; }
+    .gallery figure img { border-radius: 12px; box-shadow: var(--shadow); max-height: 680px; width: auto; }
+    .gallery figcaption { text-align: center; color: var(--muted); font-size: 15px; margin-top: 16px; max-width: 640px; margin-inline: auto; }
+
+    /* Formats table */
+    .format-tools { display: flex; gap: 12px; align-items: center; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
+    .format-tools input[type=text] { font: 15px var(--mono); padding: 8px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); width: 240px; }
+    .format-tools input[type=color] { width: 44px; height: 40px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); padding: 3px; cursor: pointer; }
+    .format-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 28px; }
+    .format-grid > div { border-top: 1px solid var(--line); padding: 10px 0; min-width: 0; }
+    .format-grid small { color: var(--muted); font-size: 13px; display: block; }
+    .format-grid code { font: 13px var(--mono); overflow-wrap: anywhere; }
+
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 8px 28px; }
+    .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
+    table { width: 100%; border-collapse: collapse; font-size: 16px; }
+    td { padding: 13px 0; border-top: 1px solid var(--line); vertical-align: top; }
+    tr:first-child td { border-top: 0; }
+    td:first-child { width: 170px; white-space: nowrap; }
+    td:last-child { color: var(--muted); }
+
+    .faq { max-width: 760px; margin: 0 auto; }
+    details { border-bottom: 1px solid var(--line); }
+    summary { cursor: pointer; list-style: none; padding: 18px 0; font-weight: 500; font-size: 17px; display: flex; justify-content: space-between; gap: 16px; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; color: var(--muted); font-size: 20px; line-height: 1; }
+    details[open] summary::after { content: "−"; }
+    details p { margin: 0 0 20px; color: var(--muted); }
+    code { font: 0.88em var(--mono); background: var(--kbd); padding: 1px 5px; border-radius: 5px; }
+    .format-grid code, .formats code { background: none; padding: 0; }
+
+    .closing { margin-top: 112px; text-align: center; padding: 60px 24px; }
+    .closing img { width: 80px; height: 80px; margin: 0 auto 16px; }
+    .closing h2 { margin-bottom: 8px; }
+    .closing p { margin: 0 0 26px; color: #4a4552; }
+    @media (prefers-color-scheme: dark) { .closing p { color: #d0cbd6; } }
+
+    footer { padding: 36px 0 52px; font-size: 14px; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 900px) {
+      .demo { grid-template-columns: 1fr; }
+      .features { grid-template-columns: 1fr 1fr; }
+      .format-grid { grid-template-columns: 1fr 1fr; }
+      .columns { grid-template-columns: 1fr; }
+      .columns table + table tr:first-child td { border-top: 1px solid var(--line); }
+    }
+    @media (max-width: 600px) {
+      header.top nav { display: none; }
+      header.top .button { margin-left: auto; }
+      .hero { padding-top: 40px; }
+      .features, .format-grid { grid-template-columns: 1fr; }
+      .card { padding: 4px 18px; }
+      td:first-child { width: 118px; white-space: normal; }
+      .gallery .wall { min-height: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#"><img src="assets/icon-256.png" alt="">Chroma</a>
+      <nav>
+        <a href="#try">Try it</a>
+        <a href="#features">Features</a>
+        <a href="#formats">Formats</a>
+        <a href="#shortcuts">Shortcuts</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/nearbycoder/chroma">GitHub</a>
+      </nav>
+      <a class="button small" href="https://github.com/nearbycoder/chroma/releases/latest/download/Chroma.dmg">Download</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <img class="icon" src="assets/icon-256.png" alt="Chroma app icon" width="104" height="104">
+      <h1>Pick any color on your screen.<span>Free and open source.</span></h1>
+      <p class="lede">Press <kbd>⌃⌥⌘P</kbd>, click a pixel, and paste it as hex, CSS, SwiftUI, Tailwind or Compose. Keep palettes, check contrast, and see how your colors look to everyone.</p>
+      <div class="actions">
+        <a class="button" href="https://github.com/nearbycoder/chroma/releases/latest/download/Chroma.dmg">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.28-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.42-3.65zM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.1 1.76-.96 2.8 1.02.08 2.06-.52 2.69-1.28z"/></svg>
+          Download for Mac
+        </a>
+        <a class="link" href="https://github.com/nearbycoder/chroma">Source on GitHub →</a>
+      </div>
+      <p class="fine">macOS 26 or later · Apple silicon and Intel · Signed and notarized</p>
+    </div>
+
+    <div class="wall">
+      <div class="shot"><img src="assets/shot-picker.jpg" width="1920" height="1080" alt="Chroma's loupe magnifying the corner of a coral swatch on a moodboard, labeled #FF7A59, with the picker controls along the bottom of the screen"></div>
+    </div>
+
+    <section id="try">
+      <div class="head">
+        <h2>Try the loupe</h2>
+        <p>Move over the picture and click to pick. The app does the same with the real pixels on any screen, then copies the value in your format.</p>
+      </div>
+      <div class="demo">
+        <div>
+          <div class="stage" id="stage" aria-label="Interactive color picking demo">
+            <canvas id="scene" aria-hidden="true"></canvas>
+            <canvas id="loupe" class="loupe" aria-hidden="true"></canvas>
+          </div>
+          <p class="demo-caption">Scroll to zoom, arrow keys to nudge, click to copy. Picks land in the history on the right.</p>
+        </div>
+        <aside class="panel" aria-live="polite">
+          <div class="picked">
+            <div class="chip" id="chip"></div>
+            <div style="min-width:0;flex:1">
+              <strong id="name">Coral</strong>
+              <input id="input" type="text" value="#FF7A59" spellcheck="false" aria-label="Color value">
+            </div>
+          </div>
+          <div>
+            <div class="label">History</div>
+            <div class="history" id="history"></div>
+          </div>
+          <div>
+            <div class="label">Contrast</div>
+            <div class="contrast-mini" id="contrast"></div>
+          </div>
+          <div>
+            <div class="label">Click to copy</div>
+            <div class="formats" id="formats"></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="head">
+        <h2>Everything a color picker should do</h2>
+        <p>Chroma lives in your menu bar. It freezes the screen for a moment while you pick, so it works on anything: apps, websites, design files, photos and video.</p>
+      </div>
+      <div class="features">
+        <div class="feature rose">
+          <div class="ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5M9.5 9.5h3v3h-3z"/></svg></div>
+          <h3>A loupe that's exact</h3>
+          <p>See every pixel under the pointer up close. Nudge with the arrow keys, zoom with the scroll wheel, or average a 3×3 square.</p>
+        </div>
+        <div class="feature blue">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M8 4c-2 0-3 1-3 3v3l-2 2 2 2v3c0 2 1 3 3 3M16 4c2 0 3 1 3 3v3l2 2-2 2v3c0 2-1 3-3 3"/></svg></div>
+          <h3>35 formats, plus yours</h3>
+          <p>Hex, CSS rgb, hsl and oklch, Display P3, Tailwind, SwiftUI, UIColor, NSColor, Compose, Flutter, Android XML and more. Write your own with a template.</p>
+        </div>
+        <div class="feature mint">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 21h10M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></div>
+          <h3>Smart formats</h3>
+          <p>Pick in Xcode and get SwiftUI; pick in Android Studio and get Compose. Set a format for any app. <kbd>Tab</kbd> switches while you pick.</p>
+        </div>
+        <div class="feature violet">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+          <h3>History and palettes</h3>
+          <p>Every pick is saved. Organize colors into palettes by dragging, name them, add notes, sort by hue or lightness, lock the finished ones.</p>
+        </div>
+        <div class="feature amber">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="15" y="3" width="6" height="18" rx="3"/><circle cx="18" cy="7.5" r="1"/><circle cx="18" cy="12" r="1"/><circle cx="18" cy="16.5" r="1"/><path d="M3 8h8M3 12h8M3 16h5"/></svg></div>
+          <h3>Color Dock</h3>
+          <p>Your palettes in a slim glass strip at the edge of the screen. Click a color to copy it, or drag it straight into Figma, Keynote or your code.</p>
+        </div>
+        <div class="feature slate">
+          <div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></div>
+          <h3>Contrast checker</h3>
+          <p>WCAG 2 ratios for text and UI, plus APCA. One click finds the nearest text or background color that passes AA or AAA.</p>
+        </div>
+        <div class="feature rose">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <h3>Color blindness preview</h3>
+          <p>See any palette with protanopia, deuteranopia, tritanopia or achromatopsia, and catch colors that blur together.</p>
+        </div>
+        <div class="feature blue">
+          <div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="7" r="2"/><circle cx="7.7" cy="14.5" r="2"/><circle cx="16.3" cy="14.5" r="2"/></svg></div>
+          <h3>Edit, harmonize, scale</h3>
+          <p>Edit in RGB, HSB, HSL or OKLCH. Get complementary, triadic and analogous colors, and a full 50–950 scale from any color.</p>
+        </div>
+        <div class="feature mint">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
+          <h3>Import and export</h3>
+          <p>Adobe .ase, Apple .clr, GIMP .gpl, Sketch palettes and JSON in; CSS, SCSS, Tailwind, SwiftUI, Android XML and PNG out. Paste any text full of color codes.</p>
+        </div>
+        <div class="feature violet">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M17.5 19a4.5 4.5 0 1 0-1.4-8.78A6 6 0 1 0 6 16.5"/><path d="m9 15 3 3 3-3M12 18v-7"/></svg></div>
+          <h3>Sync your way</h3>
+          <p>Your library is a plain JSON file. Keep it in iCloud Drive or Dropbox and every Mac stays in step, with no account.</p>
+        </div>
+        <div class="feature amber">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></div>
+          <h3>Shortcuts and automation</h3>
+          <p>Global shortcuts you can change, Shortcuts app actions, and a <code>chroma://</code> URL scheme for scripts and launchers.</p>
+        </div>
+        <div class="feature slate">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h3>Private</h3>
+          <p>No account, analytics or network access. The screen image is discarded the moment you pick or press <kbd>Esc</kbd>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="gallery" class="gallery">
+      <div class="head">
+        <h2>A closer look</h2>
+      </div>
+      <ul class="tabs" role="tablist">
+        <li><button type="button" role="tab" aria-selected="true" data-tab="library">Library</button></li>
+        <li><button type="button" role="tab" aria-selected="false" data-tab="contrast">Contrast checker</button></li>
+        <li><button type="button" role="tab" aria-selected="false" data-tab="menu">Menu bar</button></li>
+        <li><button type="button" role="tab" aria-selected="false" data-tab="formats">Formats</button></li>
+      </ul>
+      <div class="wall">
+        <figure class="on" data-panel="library">
+          <picture>
+            <source srcset="assets/shot-library-dark.png" media="(prefers-color-scheme: dark)">
+            <img src="assets/shot-library-light.png" width="1040" height="660" loading="lazy" alt="The library window: palettes in the sidebar, a grid of named swatches, and an inspector with an editor and formats">
+          </picture>
+          <figcaption>History and palettes in a sidebar, swatches you can drag between them, and an inspector with an editor, every format, contrast, tints and harmonies.</figcaption>
+        </figure>
+        <figure data-panel="contrast">
+          <picture>
+            <source srcset="assets/shot-contrast-dark.png" media="(prefers-color-scheme: dark)">
+            <img src="assets/shot-contrast-light.png" width="664" height="532" loading="lazy" alt="The contrast checker previewing violet text on paper with a 3.85 to 1 ratio and AA and AAA results">
+          </picture>
+          <figcaption>A live preview, WCAG 2 and APCA scores, and Fix buttons that keep the hue while finding a lightness that passes.</figcaption>
+        </figure>
+        <figure data-panel="menu">
+          <picture>
+            <source srcset="assets/shot-menu-dark.png" media="(prefers-color-scheme: dark)">
+            <img src="assets/shot-menu-light.png" width="320" height="542" loading="lazy" alt="The menu bar popover with the last picked color, quick actions, history and palettes">
+          </picture>
+          <figcaption>Click the menu bar icon for your last color, recent history and palettes. Click any swatch to copy it.</figcaption>
+        </figure>
+        <figure data-panel="formats">
+          <picture>
+            <source srcset="assets/shot-settings-formats-dark.png" media="(prefers-color-scheme: dark)">
+            <img src="assets/shot-settings-formats-light.png" width="560" height="708" loading="lazy" alt="Format settings with the default copy format, per-app smart formats for Xcode and Android Studio, and a list of formats">
+          </picture>
+          <figcaption>Choose the formats you use, set a format per app, and write custom ones with tokens like <code>{r}</code> and <code>{hex}</code>.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="formats">
+      <div class="head">
+        <h2>Every format, live</h2>
+        <p>Type a color in any notation, or pick one. These are the same templates the app uses.</p>
+      </div>
+      <div class="format-tools">
+        <input type="color" id="formatPicker" value="#4c6fff" aria-label="Choose a color">
+        <input type="text" id="formatInput" value="#4C6FFF" spellcheck="false" aria-label="Color in any notation">
+      </div>
+      <div class="format-grid" id="formatGrid"></div>
+    </section>
+
+    <section id="shortcuts">
+      <div class="head">
+        <h2>Shortcuts</h2>
+        <p>The same defaults as Sip, so muscle memory carries over. Change any of them in Settings.</p>
+      </div>
+      <div class="card columns">
+        <table>
+          <tr><td><kbd>⌃⌥⌘P</kbd></td><td>Pick a color, from any app</td></tr>
+          <tr><td><kbd>⌃⌥⌘O</kbd></td><td>Contrast checker</td></tr>
+          <tr><td><kbd>⌃⌥⌘C</kbd></td><td>Library</td></tr>
+          <tr><td><kbd>⌃⌥⌘D</kbd></td><td>Show or hide the Color Dock</td></tr>
+          <tr><td><kbd>Click</kbd> <kbd>↩</kbd></td><td>Pick and copy</td></tr>
+          <tr><td><kbd>⇧</kbd> <kbd>Click</kbd></td><td>Pick and keep picking</td></tr>
+        </table>
+        <table>
+          <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td><td>Move one pixel (⇧ for 10)</td></tr>
+          <tr><td><kbd>Scroll</kbd> <kbd>⌥+</kbd> <kbd>⌥−</kbd></td><td>Magnification</td></tr>
+          <tr><td><kbd>+</kbd> <kbd>−</kbd></td><td>Loupe size</td></tr>
+          <tr><td><kbd>Tab</kbd></td><td>Next format</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>S</kbd></td><td>Pixel grid, sample size</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Cancel</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="faq">
+      <div class="head">
+        <h2>Questions</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary>Why does it need Screen Recording permission?</summary>
+          <p>To read a color, Chroma has to see the pixels on screen. Each time you pick it takes one still image per display, reads it while the loupe is up, and discards it when you click or press <kbd>Esc</kbd>. Nothing is saved or sent anywhere.</p>
+        </details>
+        <details>
+          <summary>Is it free?</summary>
+          <p>Yes. It's open source under the MIT License, with no trial, subscription or account.</p>
+        </details>
+        <details>
+          <summary>How does it compare to Sip?</summary>
+          <p>Sip inspired it and is a great app. Chroma covers the same workflow (a loupe picker, history and palettes, a Color Dock, a contrast checker, color blindness previews, dozens of formats and per-app formats) and adds APCA scores, OKLCH editing, Tailwind matching, tints and harmonies, and folder-based sync. It's free to use and modify.</p>
+        </details>
+        <details>
+          <summary>Which color space does it use?</summary>
+          <p>Values are sRGB, which is what CSS hex, <code>rgb()</code> and most code expect. The <code>color(display-p3 …)</code> and <code>oklch()</code> formats convert from there.</p>
+        </details>
+        <details>
+          <summary>How do I sync palettes between Macs?</summary>
+          <p>In Settings → General, choose a library folder in iCloud Drive, Dropbox or any synced folder. Chroma keeps a single <code>Library.json</code> there and reloads it when another Mac changes it.</p>
+        </details>
+        <details>
+          <summary>Can I script it?</summary>
+          <p>Yes. The Shortcuts app has Pick Color, Get Last Picked Color, Convert Color and Add Color to Palette actions. You can also open URLs like <code>chroma://pick</code>, <code>chroma://contrast?text=%23333&amp;background=%23fff</code> or <code>chroma://add?color=%23ff7a59&amp;palette=Brand</code>.</p>
+        </details>
+        <details>
+          <summary>Which Macs does it support?</summary>
+          <p>macOS 26 or later, on Apple silicon and Intel. It's signed with a Developer ID and notarized by Apple, so it opens without warnings.</p>
+        </details>
+        <details>
+          <summary>How do I build it?</summary>
+          <p>Clone the repository, run <code>brew install xcodegen</code> and <code>xcodegen generate</code>, then open <code>Chroma.xcodeproj</code> in Xcode 26 or later.</p>
+        </details>
+      </div>
+    </section>
+
+    <div class="closing wall">
+      <img src="assets/icon-256.png" alt="">
+      <h2>Get Chroma</h2>
+      <p>Free for macOS 26 or later. It lives in your menu bar.</p>
+      <a class="button" href="https://github.com/nearbycoder/chroma/releases/latest/download/Chroma.dmg">Download for Mac</a>
+    </div>
+
+    <footer>
+      <span>© 2026 Josh Hamilton · MIT License · Not affiliated with Sip</span>
+      <span><a href="https://github.com/nearbycoder/chroma">GitHub</a> · <a href="https://github.com/nearbycoder/chroma/releases">Releases</a> · <a href="https://github.com/nearbycoder/chroma/issues">Issues</a></span>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast"><i></i><span></span></div>
+
+  <script>
+  (() => {
+    // ---- Color math: a port of the app's RGBColor and FormatTemplate ----
+    const clamp = v => Math.min(1, Math.max(0, v));
+    const hex2 = n => Math.round(clamp(n) * 255).toString(16).padStart(2, '0').toUpperCase();
+    const lin = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const enc = c => c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+
+    function parse(text) {
+      let t = String(text).trim().replace(/;$/, '');
+      let m = t.match(/^#?([0-9a-f]{3,8})$/i);
+      if (m && [3, 4, 6, 8].includes(m[1].length)) {
+        let h = m[1].length <= 4 ? [...m[1]].map(c => c + c).join('') : m[1];
+        const n = i => parseInt(h.slice(i, i + 2), 16) / 255;
+        return { r: n(0), g: n(2), b: n(4), a: h.length === 8 ? n(6) : 1 };
+      }
+      const nums = (t.match(/-?\d*\.?\d+%?/g) || []).map(s => ({ v: parseFloat(s), p: s.endsWith('%') }));
+      const alpha = x => x ? (x.p ? x.v / 100 : x.v) : 1;
+      if (/^rgba?\(/i.test(t) && nums.length >= 3) return { r: nums[0].v / 255, g: nums[1].v / 255, b: nums[2].v / 255, a: alpha(nums[3]) };
+      if (/^hsla?\(/i.test(t) && nums.length >= 3) return { ...fromHSL(nums[0].v, nums[1].v / 100, nums[2].v / 100), a: alpha(nums[3]) };
+      if (/^oklch\(/i.test(t) && nums.length >= 3) return { ...fromOKLCH(nums[0].p ? nums[0].v / 100 : nums[0].v, nums[1].v, nums[2].v), a: alpha(nums[3]) };
+      return null;
+    }
+    function fromHSL(h, s, l) {
+      const c = (1 - Math.abs(2 * l - 1)) * s, hp = ((h % 360) + 360) % 360 / 60, x = c * (1 - Math.abs(hp % 2 - 1)), m = l - c / 2;
+      const [r, g, b] = hp < 1 ? [c, x, 0] : hp < 2 ? [x, c, 0] : hp < 3 ? [0, c, x] : hp < 4 ? [0, x, c] : hp < 5 ? [x, 0, c] : [c, 0, x];
+      return { r: r + m, g: g + m, b: b + m, a: 1 };
+    }
+    function hsx(c) {
+      const max = Math.max(c.r, c.g, c.b), min = Math.min(c.r, c.g, c.b), d = max - min;
+      let h = 0;
+      if (d > 0) { h = max === c.r ? (c.g - c.b) / d : max === c.g ? (c.b - c.r) / d + 2 : (c.r - c.g) / d + 4; h *= 60; if (h < 0) h += 360; }
+      const l = (max + min) / 2;
+      return { h, sl: d === 0 ? 0 : clamp(d / (1 - Math.abs(2 * l - 1))), l, sv: max === 0 ? 0 : d / max, v: max };
+    }
+    function oklab(c) {
+      const r = lin(c.r), g = lin(c.g), b = lin(c.b);
+      const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+      const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+      const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+      return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+    }
+    function oklch(c) { const [L, a, b] = oklab(c); const C = Math.hypot(a, b); let h = Math.atan2(b, a) * 180 / Math.PI; if (h < 0) h += 360; return { L, C, h: C < 1e-4 ? 0 : h }; }
+    function fromOKLCH(L, C, h) {
+      const a = C * Math.cos(h * Math.PI / 180), b = C * Math.sin(h * Math.PI / 180);
+      const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3, s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+      return { r: clamp(enc(clamp(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s))), g: clamp(enc(clamp(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s))), b: clamp(enc(clamp(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s))), a: 1 };
+    }
+    const lum = c => 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const hex6 = c => hex2(c.r) + hex2(c.g) + hex2(c.b);
+    const hexStr = c => '#' + hex6(c) + (Math.round(c.a * 255) < 255 ? hex2(c.a) : '');
+
+    const TW = 'FEF2F2:red-50|FFE2E2:red-100|FFC9C9:red-200|FFA2A2:red-300|FF6467:red-400|FB2C36:red-500|E7000B:red-600|C10007:red-700|9F0712:red-800|82181A:red-900|460809:red-950|FFF7ED:orange-50|FFEDD4:orange-100|FFD6A7:orange-200|FFB86A:orange-300|FF8904:orange-400|FF6900:orange-500|F54900:orange-600|CA3500:orange-700|9F2D00:orange-800|7E2A0C:orange-900|441306:orange-950|FFFBEB:amber-50|FEF3C6:amber-100|FEE685:amber-200|FFD230:amber-300|FFB900:amber-400|FE9A00:amber-500|E17100:amber-600|BB4D00:amber-700|973C00:amber-800|7B3306:amber-900|461901:amber-950|FEFCE8:yellow-50|FEF9C2:yellow-100|FFF085:yellow-200|FFDF20:yellow-300|FDC700:yellow-400|F0B100:yellow-500|D08700:yellow-600|A65F00:yellow-700|894B00:yellow-800|733E0A:yellow-900|432004:yellow-950|F7FEE7:lime-50|ECFCCA:lime-100|D8F999:lime-200|BBF451:lime-300|9AE600:lime-400|7CCF00:lime-500|5EA500:lime-600|497D00:lime-700|3C6300:lime-800|35530E:lime-900|192E03:lime-950|F0FDF4:green-50|DCFCE7:green-100|B9F8CF:green-200|7BF1A8:green-300|05DF72:green-400|00C950:green-500|00A63E:green-600|008236:green-700|016630:green-800|0D542B:green-900|032E15:green-950|ECFDF5:emerald-50|D0FAE5:emerald-100|A4F4CF:emerald-200|5EE9B5:emerald-300|00D492:emerald-400|00BC7D:emerald-500|009966:emerald-600|007A55:emerald-700|006045:emerald-800|004F3B:emerald-900|002C22:emerald-950|F0FDFA:teal-50|CBFBF1:teal-100|96F7E4:teal-200|46ECD5:teal-300|00D5BE:teal-400|00BBA7:teal-500|009689:teal-600|00786F:teal-700|005F5A:teal-800|0B4F4A:teal-900|022F2E:teal-950|ECFEFF:cyan-50|CEFAFE:cyan-100|A2F4FD:cyan-200|53EAFD:cyan-300|00D3F2:cyan-400|00B8DB:cyan-500|0092B8:cyan-600|007595:cyan-700|005F78:cyan-800|104E64:cyan-900|053345:cyan-950|F0F9FF:sky-50|DFF2FE:sky-100|B8E6FE:sky-200|74D4FF:sky-300|00BCFF:sky-400|00A6F4:sky-500|0084D1:sky-600|0069A8:sky-700|00598A:sky-800|024A70:sky-900|052F4A:sky-950|EFF6FF:blue-50|DBEAFE:blue-100|BEDBFF:blue-200|8EC5FF:blue-300|51A2FF:blue-400|2B7FFF:blue-500|155DFC:blue-600|1447E6:blue-700|193CB8:blue-800|1C398E:blue-900|162456:blue-950|EEF2FF:indigo-50|E0E7FF:indigo-100|C6D2FF:indigo-200|A3B3FF:indigo-300|7C86FF:indigo-400|615FFF:indigo-500|4F39F6:indigo-600|432DD7:indigo-700|372AAC:indigo-800|312C85:indigo-900|1E1A4D:indigo-950|F5F3FF:violet-50|EDE9FE:violet-100|DDD6FF:violet-200|C4B4FF:violet-300|A684FF:violet-400|8E51FF:violet-500|7F22FE:violet-600|7008E7:violet-700|5D0EC0:violet-800|4D179A:violet-900|2F0D68:violet-950|FAF5FF:purple-50|F3E8FF:purple-100|E9D4FF:purple-200|DAB2FF:purple-300|C27AFF:purple-400|AD46FF:purple-500|9810FA:purple-600|8200DB:purple-700|6E11B0:purple-800|59168B:purple-900|3C0366:purple-950|FDF4FF:fuchsia-50|FAE8FF:fuchsia-100|F6CFFF:fuchsia-200|F4A8FF:fuchsia-300|ED6AFF:fuchsia-400|E12AFB:fuchsia-500|C800DE:fuchsia-600|A800B7:fuchsia-700|8A0194:fuchsia-800|721378:fuchsia-900|4B004F:fuchsia-950|FDF2F8:pink-50|FCE7F3:pink-100|FCCEE8:pink-200|FDA5D5:pink-300|FB64B6:pink-400|F6339A:pink-500|E60076:pink-600|C6005C:pink-700|A3004C:pink-800|861043:pink-900|510424:pink-950|FFF1F2:rose-50|FFE4E6:rose-100|FFCCD3:rose-200|FFA1AD:rose-300|FF637E:rose-400|FF2056:rose-500|EC003F:rose-600|C70036:rose-700|A50036:rose-800|8B0836:rose-900|4D0218:rose-950|F8FAFC:slate-50|F1F5F9:slate-100|E2E8F0:slate-200|CAD5E2:slate-300|90A1B9:slate-400|62748E:slate-500|45556C:slate-600|314158:slate-700|1D293D:slate-800|0F172B:slate-900|020618:slate-950|F9FAFB:gray-50|F3F4F6:gray-100|E5E7EB:gray-200|D1D5DC:gray-300|99A1AF:gray-400|6A7282:gray-500|4A5565:gray-600|364153:gray-700|1E2939:gray-800|101828:gray-900|030712:gray-950|FAFAFA:zinc-50|F4F4F5:zinc-100|E4E4E7:zinc-200|D4D4D8:zinc-300|9F9FA9:zinc-400|71717B:zinc-500|52525C:zinc-600|3F3F46:zinc-700|27272A:zinc-800|18181B:zinc-900|09090B:zinc-950|FAFAFA:neutral-50|F5F5F5:neutral-100|E5E5E5:neutral-200|D4D4D4:neutral-300|A1A1A1:neutral-400|737373:neutral-500|525252:neutral-600|404040:neutral-700|262626:neutral-800|171717:neutral-900|0A0A0A:neutral-950|FAFAF9:stone-50|F5F5F4:stone-100|E7E5E4:stone-200|D6D3D1:stone-300|A6A09B:stone-400|79716B:stone-500|57534D:stone-600|44403B:stone-700|292524:stone-800|1C1917:stone-900|0C0A09:stone-950|000000:black|FFFFFF:white'.split('|').map(e => { const [h, n] = e.split(':'); const c = parse(h); return { n, lab: oklab(c) }; });
+    function tailwind(c) {
+      const lab = oklab(c); let best = null, bd = Infinity;
+      for (const t of TW) { const d = (lab[0] - t.lab[0]) ** 2 + (lab[1] - t.lab[1]) ** 2 + (lab[2] - t.lab[2]) ** 2; if (d < bd) { bd = d; best = t; } }
+      return best ? best.n : '';
+    }
+
+    const fixed = (v, d = 3) => v.toFixed(d);
+    const trim = (v, d = 3) => { let t = v.toFixed(d); if (t.includes('.')) t = t.replace(/0+$/, '').replace(/\.$/, ''); return t === '-0' ? '0' : t; };
+    function token(name, c) {
+      const s = hsx(c), k = oklch(c);
+      const r8 = Math.round(c.r * 255), g8 = Math.round(c.g * 255), b8 = Math.round(c.b * 255), a8 = Math.round(c.a * 255);
+      const p3 = (() => { const r = lin(c.r), g = lin(c.g), b = lin(c.b); return [enc(0.8224621 * r + 0.177538 * g), enc(0.0331941 * r + 0.9668058 * g), enc(0.0170827 * r + 0.0723974 * g + 0.9105199 * b)].map(clamp); })();
+      const kk = 1 - Math.max(c.r, c.g, c.b), cm = v => kk >= 1 ? 0 : Math.round((1 - v - kk) / (1 - kk) * 100);
+      const map = {
+        hex: hex6(c), hex8: hex6(c) + hex2(c.a), A: hex2(c.a), r: r8, g: g8, b: b8, rf: fixed(c.r), gf: fixed(c.g), bf: fixed(c.b),
+        a: trim(c.a, 2), a255: a8, h: Math.round(s.h) % 360, hf: fixed(s.h / 360), s: Math.round(s.sl * 100), l: Math.round(s.l * 100),
+        sb: Math.round(s.sv * 100), bb: Math.round(s.v * 100), sbf: fixed(s.sv), bbf: fixed(s.v),
+        okl: trim(k.L * 100, 1), okc: trim(k.C, 3), okh: trim(k.h, 1), p3r: trim(p3[0], 4), p3g: trim(p3[1], 4), p3b: trim(p3[2], 4),
+        c: cm(c.r), m: cm(c.g), y: cm(c.b), k: Math.round(kk * 100), tailwind: tailwind(c),
+      };
+      return name in map ? String(map[name]) : null;
+    }
+    function render(template, c) {
+      const translucent = Math.round(c.a * 255) < 255;
+      let t = template.replace(/\{\?alpha\}([\s\S]*?)\{\/alpha\}/g, (_, x) => translucent ? x : '').replace(/\{!alpha\}([\s\S]*?)\{\/alpha\}/g, (_, x) => translucent ? '' : x);
+      return t.replace(/\{([A-Za-z0-9_]+)\}/g, (all, name) => token(name, c) ?? all);
+    }
+    const FORMATS = [
+      ['Hex', '#{hex}'], ['CSS rgb()', '{?alpha}rgba({r}, {g}, {b}, {a}){/alpha}{!alpha}rgb({r}, {g}, {b}){/alpha}'],
+      ['CSS hsl()', '{?alpha}hsla({h}, {s}%, {l}%, {a}){/alpha}{!alpha}hsl({h}, {s}%, {l}%){/alpha}'],
+      ['CSS oklch()', 'oklch({okl}% {okc} {okh}{?alpha} / {a}{/alpha})'], ['CSS display-p3', 'color(display-p3 {p3r} {p3g} {p3b}{?alpha} / {a}{/alpha})'],
+      ['Tailwind (nearest)', '{tailwind}'], ['Tailwind arbitrary', '[#{hex}]'],
+      ['SwiftUI', 'Color(red: {rf}, green: {gf}, blue: {bf}{?alpha}, opacity: {a}{/alpha})'], ['UIColor', 'UIColor(red: {rf}, green: {gf}, blue: {bf}, alpha: {a})'],
+      ['NSColor', 'NSColor(srgbRed: {rf}, green: {gf}, blue: {bf}, alpha: {a})'], ['UIColor HSB', 'UIColor(hue: {hf}, saturation: {sbf}, brightness: {bbf}, alpha: {a})'],
+      ['Objective-C', '[UIColor colorWithRed:{rf} green:{gf} blue:{bf} alpha:{a}]'], ['Jetpack Compose', 'Color(0x{A}{hex})'], ['Flutter', 'Color(0x{A}{hex})'],
+      ['Android ARGB', '#{A}{hex}'], ['React Native', "'#{hex}{?alpha}{A}{/alpha}'"], ['Java AWT', 'new Color({r}, {g}, {b}{?alpha}, {a255}{/alpha})'],
+      ['.NET', 'Color.FromArgb({a255}, {r}, {g}, {b})'], ['Unity', 'new Color({rf}f, {gf}f, {bf}f, {a}f)'], ['OpenGL', 'glColor4f({rf}f, {gf}f, {bf}f, {a}f)'],
+      ['RGB values', '{r}, {g}, {b}'], ['HSB values', '{h}°, {sb}%, {bb}%'], ['CMYK', 'cmyk({c}%, {m}%, {y}%, {k}%)'], ['Hex integer', '0x{hex}'],
+    ];
+
+    // ---- Clipboard toast ----
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function copy(text, swatch) {
+      navigator.clipboard?.writeText(text).catch(() => {});
+      toastEl.querySelector('span').textContent = 'Copied ' + text;
+      toastEl.querySelector('i').style.background = swatch;
+      toastEl.classList.add('on');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('on'), 1400);
+    }
+
+    // ---- The live picker ----
+    const stage = document.getElementById('stage');
+    const scene = document.getElementById('scene');
+    const loupe = document.getElementById('loupe');
+    const sctx = scene.getContext('2d', { willReadFrequently: true });
+    const lctx = loupe.getContext('2d');
+    let dpr = 1, W = 0, H = 0, pointer = null, cells = 13, picked = parse('#FF7A59'), history = [];
+
+    function paint() {
+      const g = sctx;
+      g.save(); g.scale(dpr, dpr);
+      const sky = g.createLinearGradient(0, 0, 0, H * 0.72);
+      sky.addColorStop(0, '#FF9A62'); sky.addColorStop(0.55, '#E0566B'); sky.addColorStop(1, '#5B2A86');
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      const glow = g.createRadialGradient(W * 0.62, H * 0.5, 0, W * 0.62, H * 0.5, H * 0.32);
+      glow.addColorStop(0, 'rgba(255,241,193,0.95)'); glow.addColorStop(1, 'rgba(255,196,107,0)');
+      g.fillStyle = glow; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#FFE9B0'; g.beginPath(); g.arc(W * 0.62, H * 0.5, H * 0.08, 0, Math.PI * 2); g.fill();
+      const hill = (y0, y1, color, c1, c2) => { g.fillStyle = color; g.beginPath(); g.moveTo(0, H * y0); g.bezierCurveTo(W * 0.3, H * c1, W * 0.65, H * c2, W, H * y1); g.lineTo(W, H); g.lineTo(0, H); g.closePath(); g.fill(); };
+      hill(0.7, 0.64, 'rgba(58,31,77,0.88)', 0.55, 0.82);
+      hill(0.84, 0.78, '#22122E', 0.72, 0.92);
+      // A palette card, so there are crisp edges to magnify.
+      const pad = W * 0.04, cw = Math.min(W * 0.36, 300), ch = cw * 0.42, cx = pad, cy = pad;
+      g.fillStyle = 'rgba(255,255,255,0.94)'; g.beginPath(); g.roundRect(cx, cy, cw, ch, 14); g.fill();
+      const sw = ['#FF7A59', '#FFB547', '#2EC4B6', '#6A5AE0', '#1B1F3B'], gap = cw * 0.03, s = (cw - gap * 6) / 5;
+      sw.forEach((c, i) => { g.fillStyle = c; g.beginPath(); g.roundRect(cx + gap + i * (s + gap), cy + ch - s - gap * 1.4, s, s, 7); g.fill(); });
+      g.fillStyle = '#1B1F3B'; g.font = `600 ${Math.round(ch * 0.2)}px -apple-system, system-ui, sans-serif`; g.fillText('Summer palette', cx + gap, cy + ch * 0.3);
+      g.restore();
+    }
+
+    function layout() {
+      dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+      const r = stage.getBoundingClientRect();
+      W = r.width; H = r.height;
+      for (const c of [scene, loupe]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+      paint();
+      draw();
+    }
+
+    function sample(px, py) {
+      const d = sctx.getImageData(px, py, 1, 1).data;
+      return { r: d[0] / 255, g: d[1] / 255, b: d[2] / 255, a: 1 };
+    }
+
+    function draw() {
+      lctx.setTransform(1, 0, 0, 1, 0, 0);
+      lctx.clearRect(0, 0, loupe.width, loupe.height);
+      if (!pointer) return;
+      const D = Math.min(170, W * 0.36) * dpr, n = cells, cell = D / n;
+      const cx = pointer.x * dpr, cy = pointer.y * dpr;
+      const px = Math.min(scene.width - 1, Math.max(0, Math.floor(cx))), py = Math.min(scene.height - 1, Math.max(0, Math.floor(cy)));
+      const color = sample(px, py);
+      lctx.save();
+      lctx.shadowColor = 'rgba(0,0,0,.45)'; lctx.shadowBlur = 22 * dpr; lctx.shadowOffsetY = 6 * dpr;
+      lctx.beginPath(); lctx.arc(cx, cy, D / 2, 0, Math.PI * 2); lctx.fillStyle = '#000'; lctx.fill();
+      lctx.restore();
+      lctx.save();
+      lctx.beginPath(); lctx.arc(cx, cy, D / 2, 0, Math.PI * 2); lctx.clip();
+      lctx.imageSmoothingEnabled = false;
+      const half = Math.floor(n / 2);
+      lctx.drawImage(scene, px - half, py - half, n, n, cx - cell * (half + 0.5), cy - cell * (half + 0.5), cell * n, cell * n);
+      lctx.strokeStyle = 'rgba(0,0,0,.14)'; lctx.lineWidth = 1;
+      lctx.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const x = cx - cell * (half + 0.5) + i * cell, y = cy - cell * (half + 0.5) + i * cell;
+        lctx.moveTo(x, cy - D / 2); lctx.lineTo(x, cy + D / 2); lctx.moveTo(cx - D / 2, y); lctx.lineTo(cx + D / 2, y);
+      }
+      lctx.stroke();
+      lctx.lineWidth = 2.5 * dpr; lctx.strokeStyle = 'rgba(0,0,0,.55)'; lctx.strokeRect(cx - cell / 2 - 1.5 * dpr, cy - cell / 2 - 1.5 * dpr, cell + 3 * dpr, cell + 3 * dpr);
+      lctx.lineWidth = 1.5 * dpr; lctx.strokeStyle = '#fff'; lctx.strokeRect(cx - cell / 2 - 0.5 * dpr, cy - cell / 2 - 0.5 * dpr, cell + dpr, cell + dpr);
+      lctx.restore();
+      const rim = 5 * dpr;
+      lctx.lineWidth = rim; lctx.strokeStyle = '#' + hex6(color);
+      lctx.beginPath(); lctx.arc(cx, cy, D / 2 - rim / 2, 0, Math.PI * 2); lctx.stroke();
+      lctx.lineWidth = dpr; lctx.strokeStyle = 'rgba(255,255,255,.85)';
+      lctx.beginPath(); lctx.arc(cx, cy, D / 2 - rim - 0.5, 0, Math.PI * 2); lctx.stroke();
+      // Label
+      const text = '#' + hex6(color);
+      lctx.font = `600 ${12.5 * dpr}px ui-monospace, "SF Mono", Menlo, monospace`;
+      const tw = lctx.measureText(text).width, lw = tw + 44 * dpr, lh = 30 * dpr;
+      let ly = cy + D / 2 + 10 * dpr;
+      if (ly + lh > loupe.height - 6 * dpr) ly = cy - D / 2 - 10 * dpr - lh;
+      const lx = Math.max(6 * dpr, Math.min(loupe.width - lw - 6 * dpr, cx - lw / 2));
+      lctx.fillStyle = 'rgba(20,20,22,.88)'; lctx.beginPath(); lctx.roundRect(lx, ly, lw, lh, lh / 2); lctx.fill();
+      lctx.fillStyle = '#' + hex6(color); lctx.beginPath(); lctx.arc(lx + 16 * dpr, ly + lh / 2, 7 * dpr, 0, Math.PI * 2); lctx.fill();
+      lctx.strokeStyle = 'rgba(255,255,255,.6)'; lctx.lineWidth = dpr; lctx.stroke();
+      lctx.fillStyle = '#fff'; lctx.textBaseline = 'middle'; lctx.fillText(text, lx + 30 * dpr, ly + lh / 2 + 0.5);
+    }
+
+    function pointFrom(e) { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+    stage.tabIndex = 0;
+    stage.addEventListener('pointermove', e => { pointer = pointFrom(e); draw(); });
+    stage.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { pointer = null; draw(); } });
+    stage.addEventListener('pointerdown', e => { pointer = pointFrom(e); stage.focus({ preventScroll: true }); draw(); });
+    stage.addEventListener('click', () => pickHere());
+    stage.addEventListener('wheel', e => { if (!pointer) return; e.preventDefault(); cells = Math.max(7, Math.min(31, cells + (e.deltaY > 0 ? 2 : -2))); draw(); }, { passive: false });
+    stage.addEventListener('keydown', e => {
+      if (!pointer) pointer = { x: W / 2, y: H / 2 };
+      const step = (e.shiftKey ? 10 : 1) / dpr;
+      const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (moves[e.key]) { e.preventDefault(); pointer.x = Math.max(0, Math.min(W - 0.01, pointer.x + moves[e.key][0])); pointer.y = Math.max(0, Math.min(H - 0.01, pointer.y + moves[e.key][1])); draw(); }
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickHere(); }
+    });
+
+    function pickHere() {
+      if (!pointer) return;
+      const c = sample(Math.floor(pointer.x * dpr), Math.floor(pointer.y * dpr));
+      setPicked(c, true);
+      copy('#' + hex6(c), '#' + hex6(c));
+    }
+
+    // ---- Panel ----
+    const chip = document.getElementById('chip'), nameEl = document.getElementById('name'), input = document.getElementById('input');
+    const historyEl = document.getElementById('history'), contrastEl = document.getElementById('contrast'), formatsEl = document.getElementById('formats');
+    function setPicked(c, record) {
+      picked = c;
+      if (record) { history = [c, ...history.filter(h => hex6(h) !== hex6(c))].slice(0, 20); }
+      chip.style.background = hexStr(c);
+      nameEl.textContent = 'Tailwind ' + tailwind(c);
+      if (document.activeElement !== input) input.value = hexStr(c);
+      historyEl.innerHTML = '';
+      history.forEach(h => {
+        const b = document.createElement('button');
+        b.style.background = hexStr(h); b.title = hexStr(h); b.setAttribute('aria-label', 'Select ' + hexStr(h));
+        b.addEventListener('click', () => setPicked(h, false));
+        historyEl.append(b);
+      });
+      const solid = { ...c, a: 1 };
+      contrastEl.innerHTML = [['On white', { r: 1, g: 1, b: 1, a: 1 }, '#fff'], ['On black', { r: 0, g: 0, b: 0, a: 1 }, '#000']].map(([label, bg, css]) => {
+        const v = ratio(solid, bg);
+        return `<div style="background:${css};color:${hexStr(solid)}"><b>${v.toFixed(2)}:1</b><span style="color:${css === '#fff' ? '#555' : '#bbb'}">${label} · ${v >= 7 ? 'AAA' : v >= 4.5 ? 'AA' : v >= 3 ? 'Large only' : 'Fails'}</span></div>`;
+      }).join('');
+      formatsEl.innerHTML = '';
+      FORMATS.slice(0, 14).forEach(([name, tpl]) => {
+        const value = render(tpl, c);
+        const b = document.createElement('button');
+        b.innerHTML = `<small></small><code></code>`;
+        b.querySelector('small').textContent = name; b.querySelector('code').textContent = value;
+        b.addEventListener('click', () => copy(value, hexStr(c)));
+        formatsEl.append(b);
+      });
+    }
+    input.addEventListener('input', () => { const c = parse(input.value); if (c) setPicked(c, false); });
+    input.addEventListener('change', () => { const c = parse(input.value); if (c) setPicked(c, true); });
+
+    // ---- Format grid ----
+    const grid = document.getElementById('formatGrid'), fInput = document.getElementById('formatInput'), fPicker = document.getElementById('formatPicker');
+    function renderGrid(c) {
+      grid.innerHTML = '';
+      FORMATS.forEach(([name, tpl]) => {
+        const d = document.createElement('div');
+        d.innerHTML = '<small></small><code></code>';
+        d.querySelector('small').textContent = name; d.querySelector('code').textContent = render(tpl, c);
+        grid.append(d);
+      });
+    }
+    fInput.addEventListener('input', () => { const c = parse(fInput.value); if (c) { renderGrid(c); fPicker.value = '#' + hex6(c).toLowerCase(); } });
+    fPicker.addEventListener('input', () => { const c = parse(fPicker.value); fInput.value = '#' + hex6(c); renderGrid(c); });
+
+    // ---- Gallery tabs ----
+    const tabs = [...document.querySelectorAll('.tabs button')];
+    tabs.forEach(t => t.addEventListener('click', () => {
+      tabs.forEach(o => o.setAttribute('aria-selected', String(o === t)));
+      document.querySelectorAll('.gallery figure').forEach(f => f.classList.toggle('on', f.dataset.panel === t.dataset.tab));
+    }));
+
+    new ResizeObserver(layout).observe(stage);
+    layout();
+    setPicked(picked, true);
+    renderGrid(parse(fInput.value));
+  })();
+  </script>
+</body>
+</html>

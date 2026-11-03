@@ -1,4 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#d97706"/>
-  <text x="32" y="32" dy="0.35em" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="32" font-weight="600" fill="#ffffff">C</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#29273B"/>
+      <stop offset="1" stop-color="#11101A"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <g style="mix-blend-mode:screen;isolation:isolate">
+    <circle cx="512" cy="380" r="218" fill="#FF4D6D" opacity="0.9" style="mix-blend-mode:screen"/>
+    <circle cx="398" cy="578" r="218" fill="#2BD9A8" opacity="0.9" style="mix-blend-mode:screen"/>
+    <circle cx="626" cy="578" r="218" fill="#4C6FFF" opacity="0.9" style="mix-blend-mode:screen"/>
+  </g>
 </svg>

@@ -35,6 +35,12 @@ enum Harness {
             coordinator.showLibrary(select: LibraryStore.shared.palettes.first?.colors.dropFirst(2).first?.color)
             if let first = LibraryStore.shared.palettes.first { coordinator.libraryWindow.model.source = .palette(first.id) }
             if let item = LibraryStore.shared.palettes.first?.colors.dropFirst(2).first { coordinator.libraryWindow.model.selection = [item.id] }
+        case "library-multi":
+            coordinator.showLibrary()
+            if let first = LibraryStore.shared.palettes.first {
+                coordinator.libraryWindow.model.source = .palette(first.id)
+                coordinator.libraryWindow.model.selection = Set(first.colors[5...7].map(\.id))
+            }
         case "contrast":
             coordinator.showContrast(text: RGBColor(hex: "7C5CFF"), background: RGBColor(hex: "F4F1EA"))
         case "contrast-dark":
@@ -105,6 +111,7 @@ enum Harness {
                 while session.format.id != parts[1] && AppSettings.shared.shownFormats.contains(where: { $0.id == parts[1] }) { session.cycleFormat() }
             case "nogrid": AppSettings.shared.showGrid = false
             case "hint": session.showControls(for: 60)
+            case "picked": session.showPickedHint(["FF7A59", "FFB547", "2EC4B6", "6A5AE0"].compactMap { RGBColor(hex: $0) })
             default: print("Harness: skipped \(command)")
             }
         }

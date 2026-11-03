@@ -156,7 +156,9 @@ struct LibraryView: View {
         }
         .inspector(isPresented: $model.showInspector) {
             Group {
-                if let source = model.source, let item = model.focused {
+                if let source = model.source, model.selection.count > 1, model.selectedItems.count > 1 {
+                    SelectionInspector(model: model, items: model.selectedItems, source: source)
+                } else if let source = model.source, let item = model.focused {
                     ColorInspector(model: model, item: item, source: source)
                 } else {
                     ContentUnavailableView("No Color Selected", systemImage: "eyedropper", description: Text("Select a color to see its values, edit it and check its contrast."))
@@ -535,7 +537,7 @@ struct PaletteDetail: View {
     @ViewBuilder
     private var selectionMenu: some View {
         let selected = model.selectedItems
-        Button("Copy \(selected.count) Colors") { Clipboard.copy(selected.map { settings.string($0.color) }.joined(separator: "\n")) }
+        Button("Copy \(selected.count) Colors") { AppCoordinator.shared?.copy(selected.map(\.color)) }
         Button("New Palette from Selection") {
             let id = library.createPalette(colors: selected)
             model.source = .palette(id)
@@ -740,11 +742,15 @@ struct SwatchCell: View {
     let simulation: VisionSimulation
     let dropTarget: Bool
     @ObservedObject private var settings = AppSettings.shared
+    @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Swatch(color: item.color, cornerRadius: 12, simulation: simulation)
                 .aspectRatio(1.25, contentMode: .fit)
+                .shadow(color: .black.opacity(hovering ? 0.18 : 0), radius: 8, y: 3)
+                .offset(y: hovering ? -2 : 0)
+                .animation(.snappy(duration: 0.18), value: hovering)
                 .overlay(alignment: .leading) {
                     if dropTarget {
                         Capsule().fill(Color.accentColor).frame(width: 4).offset(x: -9)
@@ -765,6 +771,7 @@ struct SwatchCell: View {
             .padding(.horizontal, 2)
         }
         .contentShape(Rectangle())
+        .onHover { hovering = $0 }
         .help(item.note ?? item.displayName)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(item.displayName), \(item.color.hexString)")
@@ -942,6 +949,71 @@ struct ColorInspector: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.subheadline.weight(.semibold))
             content()
+        }
+    }
+}
+
+/// The inspector for several colors: a strip of them and what you can do with them together.
+struct SelectionInspector: View {
+    @ObservedObject var model: LibraryModel
+    let items: [ColorItem]
+    let source: ColorSource
+    @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 0) {
+                    ForEach(items) { item in
+                        Rectangle().fill(model.simulation.apply(item.color).color)
+                    }
+                }
+                .frame(height: 110)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.primary.opacity(0.12)))
+                .onDrag { ColorDrag.provider(for: items, from: source) }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(items.count) Colors Selected").font(.title3.weight(.semibold))
+                    Text("⌘-click or ⇧-click to change the selection.").font(.callout).foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("Copy as \(settings.copyFormat.name)", systemImage: "doc.on.doc") {
+                        AppCoordinator.shared?.copy(items.map(\.color))
+                    }
+                    Button("New Palette from Selection", systemImage: "plus.square.on.square") {
+                        let id = library.createPalette(colors: items)
+                        model.source = .palette(id)
+                        model.renaming = id
+                    }
+                    if items.count == 2 {
+                        Button("Check Contrast Between Them", systemImage: "circle.lefthalf.filled") {
+                            AppCoordinator.shared?.showContrast(text: items[0].color, background: items[1].color)
+                        }
+                    }
+                }
+                .buttonStyle(.borderless)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Colors").font(.subheadline.weight(.semibold))
+                    ForEach(items) { item in
+                        HStack(spacing: 8) {
+                            Swatch(color: item.color, cornerRadius: 5, simulation: model.simulation)
+                                .frame(width: 22, height: 22)
+                            Text(item.displayName).lineLimit(1)
+                            Spacer()
+                            Text(settings.string(item.color))
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+            .padding(16)
         }
     }
 }

@@ -195,6 +195,15 @@ final class AppCoordinator {
         toast.show(color: color, title: "Copied", detail: text, near: point)
     }
 
+    /// Copies several colors, one per line.
+    func copy(_ colors: [RGBColor]) {
+        guard let first = colors.first else { return }
+        guard colors.count > 1 else { return copy(first) }
+        let values = colors.map { AppSettings.shared.string($0) }
+        Clipboard.copy(values.joined(separator: "\n"))
+        toast.show(color: first, title: "Copied \(colors.count) colors", detail: values.joined(separator: ", "))
+    }
+
     // MARK: Windows
 
     func showLibrary(select color: RGBColor? = nil, source: ColorSource? = nil) {

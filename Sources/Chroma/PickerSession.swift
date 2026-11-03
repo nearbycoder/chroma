@@ -35,7 +35,8 @@ final class PickerSession {
     private(set) var pointer: CGPoint
     /// Format shown in the loupe; Tab cycles through the shown formats.
     private(set) var format: ColorFormat
-    private(set) var pickedCount = 0
+    /// Colors picked so far with ⇧-click.
+    private(set) var picked: [RGBColor] = []
 
     init(snapshots: [ScreenSnapshot], purpose: PickPurpose) {
         self.purpose = purpose
@@ -239,11 +240,11 @@ final class PickerSession {
         guard let color = currentColor else { return }
         switch purpose {
         case .copy:
-            pickedCount += 1
+            picked.append(color)
             onPick?(color, keepPicking)
             if keepPicking {
                 windowUnderPointer?.loupe.flash()
-                hint.show(pickedCount == 1 ? "Picked 1 color. Keep clicking, or press Esc" : "Picked \(pickedCount) colors", for: 2)
+                hint.show(picked.count == 1 ? "Keep clicking, or press Esc when you're done" : "\(picked.count) colors picked", colors: picked, for: picked.count == 1 ? 4 : 2.5)
             } else {
                 end()
             }
@@ -253,6 +254,13 @@ final class PickerSession {
             handler(color)
         }
     }
+
+    #if DEBUG
+    /// The ⇧-click hint with some colors, for screenshots.
+    func showPickedHint(_ colors: [RGBColor]) {
+        hint.show("\(colors.count) colors picked", colors: colors, for: 60)
+    }
+    #endif
 
     func update() {
         for window in windows {
@@ -341,6 +349,7 @@ final class LoupeView: NSView {
     private static let labelGap: CGFloat = 10
     private static let margin: CGFloat = 24
     private var labelBelow = true
+    private var screenWidth: CGFloat = .greatestFiniteMagnitude
 
     init(snapshot: ScreenSnapshot) {
         self.snapshot = snapshot
@@ -368,7 +377,9 @@ final class LoupeView: NSView {
 
     /// Centers the loupe on the pointer, with the label below (or above, near the bottom of the screen).
     func place(at point: CGPoint, in screen: CGSize) {
-        let width = max(diameter, 440) + Self.margin * 2
+        if screenWidth != screen.width { screenWidth = screen.width; needsDisplay = true }
+        // Wide enough for the label to slide sideways and stay on screen near an edge.
+        let width = max(diameter, 440) * 2 + Self.margin * 2
         let height = diameter + Self.labelGap + Self.labelHeight + Self.margin * 2
         labelBelow = point.y - diameter / 2 - Self.labelGap - Self.labelHeight > 8
         let loupeCenterY = labelBelow ? height - Self.margin - diameter / 2 : Self.margin + diameter / 2
@@ -479,10 +490,12 @@ final class LoupeView: NSView {
         }
         let swatch: CGFloat = 14
         let textSize = text.size()
-        let textWidth = min(ceil(textSize.width), bounds.width - 60)
+        let textWidth = min(ceil(textSize.width), 400)
         let width = textWidth + swatch + 30
         let y = labelBelow ? center.y - d / 2 - Self.labelGap - Self.labelHeight : center.y + d / 2 + Self.labelGap
-        let rect = CGRect(x: (center.x - width / 2).rounded(), y: y, width: width, height: Self.labelHeight)
+        // Centered under the lens, but kept on screen when the pointer is near the left or right edge.
+        let x = min(max(center.x - width / 2, 8 - frame.minX), screenWidth - 8 - frame.minX - width)
+        let rect = CGRect(x: x.rounded(), y: y, width: width, height: Self.labelHeight)
 
         let capsule = NSBezierPath(roundedRect: rect, xRadius: Self.labelHeight / 2, yRadius: Self.labelHeight / 2)
         NSGraphicsContext.saveGraphicsState()
@@ -516,12 +529,14 @@ final class LoupeView: NSView {
 @MainActor
 final class PickerHintModel: ObservableObject {
     @Published var message: String?
+    @Published var colors: [RGBColor] = []
     @Published var visible = false
     private var hideWork: DispatchWorkItem?
 
-    /// Shows `message`, or the list of controls when it's nil.
-    func show(_ message: String?, for seconds: Double) {
+    /// Shows `message` (after a row of swatches, if there are colors), or the list of controls when it's nil.
+    func show(_ message: String?, colors: [RGBColor] = [], for seconds: Double) {
         self.message = message
+        self.colors = colors
         withAnimation(.easeOut(duration: 0.2)) { visible = true }
         hideWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -551,7 +566,19 @@ struct PickerHint: View {
     @ViewBuilder
     private var content: some View {
         if let message = model.message {
-            Text(message).font(.system(size: 13, weight: .medium))
+            HStack(spacing: 10) {
+                if !model.colors.isEmpty {
+                    HStack(spacing: -6) {
+                        // The latest few, overlapping like a fanned stack.
+                        ForEach(Array(model.colors.suffix(8).enumerated()), id: \.offset) { _, color in
+                            Circle().fill(color.color)
+                                .overlay(Circle().strokeBorder(.white.opacity(0.8), lineWidth: 1.5))
+                                .frame(width: 22, height: 22)
+                        }
+                    }
+                }
+                Text(message).font(.system(size: 13, weight: .medium))
+            }
         } else {
             HStack(spacing: 16) {
                 key("Click", "copy")

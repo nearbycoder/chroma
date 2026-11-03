@@ -102,6 +102,23 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 }
 
+/// A color in the popover, which grows a little under the pointer.
+struct MenuSwatch: View {
+    let color: RGBColor
+    @State private var hovering = false
+
+    var body: some View {
+        Swatch(color: color, cornerRadius: 6)
+            .frame(width: 24, height: 24)
+            .scaleEffect(hovering ? 1.15 : 1)
+            .shadow(color: .black.opacity(hovering ? 0.25 : 0), radius: 3, y: 1)
+            .zIndex(hovering ? 1 : 0)
+            .animation(.snappy(duration: 0.15), value: hovering)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+    }
+}
+
 /// The popover under the menu bar item: the latest color, quick actions, history and palettes.
 struct MenuPopover: View {
     let close: () -> Void
@@ -280,9 +297,7 @@ struct MenuPopover: View {
     private func swatchGrid(_ items: [ColorItem], source: ColorSource) -> some View {
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(24), spacing: 5), count: 10), alignment: .leading, spacing: 5) {
             ForEach(items) { item in
-                Swatch(color: item.color, cornerRadius: 6)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
+                MenuSwatch(color: item.color)
                     .help("\(item.displayName)  \(settings.string(item.color))")
                     .accessibilityElement()
                     .accessibilityLabel("\(item.displayName), \(item.color.hexString)")

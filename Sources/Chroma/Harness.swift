@@ -43,6 +43,9 @@ enum Harness {
             coordinator.showWelcome()
         case "menu":
             showMenu()
+        case "toast":
+            coordinator.copy(RGBColor(hex: "6A5AE0") ?? .black, toastAt: CGPoint(x: 400, y: 400))
+            minWidth = 20
         case "dock":
             LibraryStore.shared.palettes.indices.prefix(3).forEach { index in
                 LibraryStore.shared.updatePalette(LibraryStore.shared.palettes[index].id) { $0.inDock = true }

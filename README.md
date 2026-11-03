@@ -8,10 +8,10 @@ A free, open source color picker for macOS. Press **⌃⌥⌘P**, click any pixe
 
 ## Features
 
-- **A loupe that's exact.** The screen freezes and a magnifier follows the pointer. Arrow keys move one pixel, scrolling zooms, and you can average a 3×3 or 5×5 square. ⇧-click to pick several colors in a row.
+- **A loupe that's exact.** The screen freezes and a magnifier follows the pointer, with the value and the color's name below it. Arrow keys move one pixel, scrolling zooms, and you can average a 3×3 or 5×5 square. ⇧-click to pick several colors in a row.
 - **35 formats, plus your own.** Hex, CSS `rgb()`, `hsl()`, `oklch()` and `color(display-p3)`, the nearest Tailwind swatch, SwiftUI, UIColor, NSColor, CGColor, Objective-C, Jetpack Compose, Flutter, Android XML, React Native, Java, .NET, Unity, OpenGL, CMYK and more. Write custom formats with tokens like `{r}`, `{hex}` and `{name}`.
 - **Smart formats.** Picks made in Xcode copy SwiftUI and picks in Android Studio copy Compose. Add a rule for any app. Tab cycles formats while picking.
-- **History and palettes.** Every pick is saved. Drag colors into palettes, name them, add notes, sort by hue, lightness or name, merge, duplicate and lock palettes.
+- **History and palettes.** Every pick is saved. Drag colors into palettes, name them, add notes, sort by hue, lightness or name, merge, duplicate and lock palettes. Filter by name or hex, select with the arrow keys (⇧ to extend, ⌘A for all), copy with Return, and undo any change with ⌘Z.
 - **Color Dock.** Your palettes in a glass strip at any screen edge. Click to copy, drag into any app, drop it in the middle of the screen to hide it.
 - **Contrast checker.** WCAG 2 ratios for normal text, large text and UI, plus APCA (Lc). Fix buttons find the nearest passing text or background color while keeping the hue.
 - **Color blindness preview.** Protanopia, deuteranopia, tritanopia and achromatopsia, for whole palettes and in the contrast checker.

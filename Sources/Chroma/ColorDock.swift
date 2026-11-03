@@ -152,6 +152,7 @@ struct DockView: View {
     let controller: ColorDockController
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var settings = AppSettings.shared
+    @State private var handleHovered = false
 
     static let swatch: CGFloat = 24
     static let spacing: CGFloat = 6
@@ -175,7 +176,13 @@ struct DockView: View {
             if !settings.dockCollapsed {
                 let across = vertical ? AnyLayout(HStackLayout(alignment: .top, spacing: 10)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
                 across {
-                    ForEach(groups, id: \.id) { group in
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                        if index > 0 {
+                            // A hairline between palettes.
+                            Capsule().fill(.primary.opacity(0.12))
+                                .frame(width: vertical ? 1 : nil, height: vertical ? nil : 1)
+                                .frame(maxWidth: vertical ? nil : .infinity, maxHeight: vertical ? .infinity : nil)
+                        }
                         groupView(group)
                     }
                 }
@@ -188,13 +195,16 @@ struct DockView: View {
     }
 
     private var handle: some View {
-        let shape = Capsule()
-        return ZStack {
-            shape.fill(.primary.opacity(0.25))
+        ZStack {
+            Capsule().fill(.primary.opacity(handleHovered ? 0.45 : 0.25))
                 .frame(width: vertical ? 22 : 5, height: vertical ? 5 : 22)
         }
         .frame(width: vertical ? Self.swatch : 14, height: vertical ? 14 : Self.swatch)
         .contentShape(Rectangle())
+        .onHover { hovering in withAnimation(.easeOut(duration: 0.12)) { handleHovered = hovering } }
+        .pointerStyle(.grabIdle)
+        .accessibilityLabel("Color Dock handle")
+        .accessibilityHint(settings.dockCollapsed ? "Expands the dock" : "Collapses the dock")
         .help("Click to \(settings.dockCollapsed ? "expand" : "collapse"). Drag to move; drop in the middle of the screen to hide.")
         // One gesture for both, since the panel moves under the pointer and a separate tap would fire after every drag.
         .gesture(
@@ -254,6 +264,9 @@ struct DockSwatch: View {
             .animation(.snappy(duration: 0.15), value: hovering)
             .onHover { hovering = $0 }
             .help("\(item.displayName)  \(settings.string(item.color))\n\(title)")
+            .accessibilityElement()
+            .accessibilityLabel("\(item.displayName), \(item.color.hexString)")
+            .accessibilityAddTraits(.isButton)
             .onTapGesture { AppCoordinator.shared?.copy(item.color) }
             .onDrag { ColorDrag.provider(for: [item], from: source) }
             .contextMenu { ColorActions(item: item, source: source) }

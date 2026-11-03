@@ -467,13 +467,19 @@ final class LoupeView: NSView {
     }
 
     private func drawLabel(color: RGBColor, center: CGPoint, diameter d: CGFloat) {
-        let text = settings.string(color, format: format)
-        let font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .semibold)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
-        let maxTextWidth = bounds.width - 60
-        let string = NSAttributedString(string: text, attributes: attributes)
-        let textWidth = min(ceil(string.size().width), maxTextWidth)
+        let value = NSAttributedString(string: settings.string(color, format: format), attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 12.5, weight: .semibold), .foregroundColor: NSColor.white,
+        ])
+        // The color's name after the value, unless the value already is the name.
+        let text = NSMutableAttributedString(attributedString: value)
+        if format.id != "name" {
+            text.append(NSAttributedString(string: "  " + ColorNames.shared.name(for: color), attributes: [
+                .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor.white.withAlphaComponent(0.6),
+            ]))
+        }
         let swatch: CGFloat = 14
+        let textSize = text.size()
+        let textWidth = min(ceil(textSize.width), bounds.width - 60)
         let width = textWidth + swatch + 30
         let y = labelBelow ? center.y - d / 2 - Self.labelGap - Self.labelHeight : center.y + d / 2 + Self.labelGap
         let rect = CGRect(x: (center.x - width / 2).rounded(), y: y, width: width, height: Self.labelHeight)
@@ -498,10 +504,10 @@ final class LoupeView: NSView {
         NSColor.white.withAlphaComponent(0.6).setStroke()
         dot.stroke()
 
-        let textRect = CGRect(x: rect.minX + swatch + 17, y: rect.midY - string.size().height / 2, width: textWidth, height: string.size().height)
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingMiddle
-        NSAttributedString(string: text, attributes: attributes.merging([.paragraphStyle: paragraph]) { $1 }).draw(in: textRect)
+        paragraph.lineBreakMode = .byTruncatingTail
+        text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
+        text.draw(in: CGRect(x: rect.minX + swatch + 17, y: rect.midY - textSize.height / 2, width: textWidth, height: textSize.height))
     }
 }
 

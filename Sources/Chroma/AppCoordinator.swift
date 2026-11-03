@@ -327,6 +327,7 @@ enum MainMenu {
         editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: "")
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = editMenu
         main.addItem(editItem)
@@ -335,7 +336,7 @@ enum MainMenu {
         let colorMenu = NSMenu(title: "Color")
         colorMenu.addItem(MenuAction.item("Pick Color", key: "p", modifiers: [.command, .shift]) { AppCoordinator.shared?.pick() })
         colorMenu.addItem(MenuAction.item("Contrast Checker", key: "k", modifiers: [.command, .shift]) { AppCoordinator.shared?.showContrast() })
-        colorMenu.addItem(MenuAction.item("Show Color Dock", key: "d", modifiers: [.command, .shift]) { AppSettings.shared.showDock.toggle() })
+        colorMenu.addItem(MenuAction.item("Color Dock", key: "d", modifiers: [.command, .shift], isOn: { AppSettings.shared.showDock }) { AppSettings.shared.showDock.toggle() })
         colorItem.submenu = colorMenu
         main.addItem(colorItem)
 
@@ -352,17 +353,27 @@ enum MainMenu {
 }
 
 /// A menu item that runs a closure.
-final class MenuAction: NSObject {
+final class MenuAction: NSObject, NSMenuItemValidation {
     private let action: @MainActor () -> Void
+    private let isOn: (@MainActor () -> Bool)?
     private static var retained: [MenuAction] = []
 
-    private init(_ action: @escaping @MainActor () -> Void) { self.action = action }
+    private init(_ action: @escaping @MainActor () -> Void, isOn: (@MainActor () -> Bool)?) {
+        self.action = action
+        self.isOn = isOn
+    }
 
     @objc private func run() { MainActor.assumeIsolated { action() } }
 
+    /// Shows a checkmark for items that toggle something.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if let isOn { menuItem.state = MainActor.assumeIsolated { isOn() } ? .on : .off }
+        return true
+    }
+
     @MainActor
-    static func item(_ title: String, key: String = "", modifiers: NSEvent.ModifierFlags = .command, action: @escaping @MainActor () -> Void) -> NSMenuItem {
-        let target = MenuAction(action)
+    static func item(_ title: String, key: String = "", modifiers: NSEvent.ModifierFlags = .command, isOn: (@MainActor () -> Bool)? = nil, action: @escaping @MainActor () -> Void) -> NSMenuItem {
+        let target = MenuAction(action, isOn: isOn)
         retained.append(target)
         let item = NSMenuItem(title: title, action: #selector(run), keyEquivalent: key)
         item.keyEquivalentModifierMask = modifiers

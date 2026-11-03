@@ -25,6 +25,12 @@ final class LibraryModel: ObservableObject {
         return colors.first { selection.contains($0.id) } ?? (selection.isEmpty ? nil : colors.first)
     }
 
+    /// Deletes a palette; Edit › Undo brings it back.
+    func delete(_ id: UUID) {
+        if source == .palette(id) { source = .history }
+        library.deletePalette(id)
+    }
+
     func select(_ color: RGBColor) {
         if let source, let item = library.colors(in: source).first(where: { $0.color == color.quantized }) {
             selection = [item.id]
@@ -48,6 +54,8 @@ final class LibraryModel: ObservableObject {
 final class LibraryWindowController: NSObject, NSWindowDelegate {
     private(set) var window: NSWindow?
     let model = LibraryModel()
+    /// Typing in a text field gets its own undo, so the field editor's steps never mix with the library's.
+    private let textUndo = UndoManager()
 
     func show(select color: RGBColor? = nil, source: ColorSource? = nil) {
         if window == nil {
@@ -109,6 +117,10 @@ final class LibraryWindowController: NSObject, NSWindowDelegate {
         if !failures.isEmpty { model.alert = failures.joined(separator: "\n") }
     }
 
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        window.firstResponder is NSTextView ? textUndo : LibraryStore.shared.undoManager
+    }
+
     func export(_ palette: Palette, as format: ExportFormat) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = palette.name + "." + format.fileExtension
@@ -157,6 +169,11 @@ struct LibraryView: View {
             let ids = Set(source.map { library.colors(in: $0).map(\.id) } ?? [])
             model.selection.formIntersection(ids)
         }
+        .onChange(of: library.palettes) { _, palettes in
+            // An undo or a sync can remove the palette on screen.
+            if case .palette(let id) = model.source, !palettes.contains(where: { $0.id == id }) { model.source = .history }
+            if let id = model.renaming, !palettes.contains(where: { $0.id == id }) { model.renaming = nil }
+        }
         .alert("Chroma", isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } })) {
             Button("OK") { model.alert = nil }
         } message: {
@@ -171,7 +188,6 @@ struct LibraryView: View {
 struct LibrarySidebar: View {
     @ObservedObject var model: LibraryModel
     @ObservedObject private var library = LibraryStore.shared
-    @State private var confirmDelete: Palette?
 
     var body: some View {
         List(selection: $model.source) {
@@ -192,13 +208,23 @@ struct LibrarySidebar: View {
 
             Section("Palettes") {
                 ForEach(library.palettes) { palette in
-                    PaletteRow(model: model, palette: palette, confirmDelete: $confirmDelete)
+                    PaletteRow(model: model, palette: palette)
                         .tag(ColorSource.palette(palette.id))
                 }
                 .onMove { library.movePalettes(from: $0, to: $1) }
             }
         }
         .listStyle(.sidebar)
+        .onDeleteCommand {
+            guard case .palette(let id) = model.source, let palette = library.palette(id) else { return }
+            if palette.isLocked { NSSound.beep() } else { model.delete(id) }
+        }
+        // Return renames, like in Finder.
+        .onKeyPress(.return) {
+            guard model.renaming == nil, case .palette(let id) = model.source else { return .ignored }
+            model.renaming = id
+            return .handled
+        }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 4) {
                 Button {
@@ -228,24 +254,12 @@ struct LibrarySidebar: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .confirmationDialog("Delete “\(confirmDelete?.name ?? "")”?", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
-            Button("Delete Palette", role: .destructive) {
-                if let palette = confirmDelete {
-                    if model.source == .palette(palette.id) { model.source = .history }
-                    library.deletePalette(palette.id)
-                }
-                confirmDelete = nil
-            }
-        } message: {
-            Text("Its \(confirmDelete?.colors.count ?? 0) colors will be removed. This can't be undone.")
-        }
     }
 }
 
 struct PaletteRow: View {
     @ObservedObject var model: LibraryModel
     let palette: Palette
-    @Binding var confirmDelete: Palette?
     @ObservedObject private var library = LibraryStore.shared
     @State private var name = ""
     @FocusState private var editing: Bool
@@ -284,7 +298,7 @@ struct PaletteRow: View {
             defer { ColorDrag.reset() }
             return library.add(ColorDrag.colors(from: strings), to: .palette(palette.id)) > 0
         } isTargeted: { targeted = $0 && !palette.isLocked }
-        .contextMenu { PaletteMenu(model: model, palette: palette, confirmDelete: $confirmDelete) }
+        .contextMenu { PaletteMenu(model: model, palette: palette) }
     }
 
     /// The palette's first colors as a little stack of stripes.
@@ -313,7 +327,6 @@ struct PaletteRow: View {
 struct PaletteMenu: View {
     @ObservedObject var model: LibraryModel
     let palette: Palette
-    @Binding var confirmDelete: Palette?
     @ObservedObject private var library = LibraryStore.shared
 
     var body: some View {
@@ -344,7 +357,7 @@ struct PaletteMenu: View {
         }
         Button("Copy as CSS Variables") { Clipboard.copy(PaletteIO.text(for: palette, as: .css)) }
         Divider()
-        Button("Delete…", role: .destructive) { confirmDelete = palette }
+        Button("Delete Palette", role: .destructive) { model.delete(palette.id) }
     }
 }
 
@@ -356,11 +369,28 @@ struct PaletteDetail: View {
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var settings = AppSettings.shared
     @State private var dropTarget: UUID?
-    @State private var confirmDelete: Palette?
     @State private var addingColor = false
     @State private var newColor = RGBColor(red: 0.2, green: 0.5, blue: 0.95)
+    @State private var search = ""
+    /// Where arrow keys move from, and where ⇧-arrows and ⇧-click extend from.
+    @State private var cursor: UUID?
+    @State private var anchor: UUID?
+    @State private var columns = 1
+    @FocusState private var gridFocused: Bool
 
     private var items: [ColorItem] { library.colors(in: source) }
+    /// The colors that match the search field.
+    private var visible: [ColorItem] {
+        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return items }
+        let hex = query.hasPrefix("#") ? String(query.dropFirst()) : query
+        return items.filter { item in
+            item.displayName.lowercased().contains(query)
+                || item.color.hex6.lowercased().hasPrefix(hex)
+                || (item.note?.lowercased().contains(query) ?? false)
+                || ColorNames.shared.tailwindName(for: item.color).name.contains(query)
+        }
+    }
     private var palette: Palette? {
         if case .palette(let id) = source { return library.palette(id) }
         return nil
@@ -368,22 +398,48 @@ struct PaletteDetail: View {
     private var locked: Bool { library.isLocked(source) }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                if items.isEmpty {
-                    empty
-                } else {
-                    grid
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+                    // Focusable apart from the header, so its text field keeps its own arrow keys and Return.
+                    Group {
+                        if items.isEmpty {
+                            empty
+                        } else if visible.isEmpty {
+                            ContentUnavailableView.search(text: search)
+                        } else {
+                            grid
+                        }
+                    }
+                    .focusable()
+                    .focused($gridFocused)
+                    .focusEffectDisabled()
+                    .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+                        guard let id = moveCursor(press) else { return .ignored }
+                        withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(id) }
+                        return .handled
+                    }
+                    .onKeyPress(.return) {
+                        guard let item = model.focused else { return .ignored }
+                        AppCoordinator.shared?.copy(item.color)
+                        return .handled
+                    }
                 }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background {
             // Clicking empty space clears the selection.
-            Color.clear.contentShape(Rectangle()).onTapGesture { model.selection = [] }
+            Color.clear.contentShape(Rectangle()).onTapGesture { model.selection = []; gridFocused = true }
         }
+        .searchable(text: $search, placement: .toolbar, prompt: "Filter by name or hex")
+        .onChange(of: search) {
+            // Hidden colors shouldn't be deleted or dragged along with the visible ones.
+            model.selection.formIntersection(visible.map(\.id))
+        }
+        .onCommand(#selector(NSResponder.selectAll(_:))) { model.selection = Set(visible.map(\.id)) }
         .dropDestination(for: String.self) { strings, _ in
             defer { ColorDrag.reset() }
             return library.add(ColorDrag.colors(from: strings), to: source) > 0
@@ -401,21 +457,13 @@ struct PaletteDetail: View {
         .navigationTitle(library.title(of: source))
         .navigationSubtitle("\(items.count) color\(items.count == 1 ? "" : "s")")
         .toolbar { toolbar }
-        .confirmationDialog("Delete “\(confirmDelete?.name ?? "")”?", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
-            Button("Delete Palette", role: .destructive) {
-                if let palette = confirmDelete {
-                    model.source = .history
-                    library.deletePalette(palette.id)
-                }
-            }
-        }
     }
 
     @ViewBuilder
     private var header: some View {
         if let palette {
             VStack(alignment: .leading, spacing: 6) {
-                TextField("Description", text: Binding(get: { palette.note }, set: { value in library.updatePalette(palette.id) { $0.note = value } }), axis: .vertical)
+                TextField("Add a description", text: Binding(get: { palette.note }, set: { value in library.updatePalette(palette.id, action: "Edit Description") { $0.note = value } }), axis: .vertical)
                     .textFieldStyle(.plain)
                     .foregroundStyle(.secondary)
                     .disabled(locked)
@@ -458,7 +506,7 @@ struct PaletteDetail: View {
 
     private var grid: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 104, maximum: 140), spacing: 14)], alignment: .leading, spacing: 16) {
-            ForEach(items) { item in
+            ForEach(visible) { item in
                 SwatchCell(item: item, selected: model.selection.contains(item.id), simulation: model.simulation, dropTarget: dropTarget == item.id)
                     .onTapGesture(count: 2) { AppCoordinator.shared?.copy(item.color) }
                     .onTapGesture { click(item) }
@@ -471,8 +519,38 @@ struct PaletteDetail: View {
                         return drop(strings, before: item)
                     } isTargeted: { dropTarget = $0 ? item.id : (dropTarget == item.id ? nil : dropTarget) }
                     .contextMenu {
-                        ColorActions(item: item, source: source)
+                        if model.selection.contains(item.id) && model.selection.count > 1 {
+                            selectionMenu
+                        } else {
+                            ColorActions(item: item, source: source)
+                        }
                     }
+            }
+        }
+        // The same column count the adaptive grid works out, for moving up and down with the arrow keys.
+        .onGeometryChange(for: Int.self) { max(1, Int(($0.size.width + 14) / (104 + 14))) } action: { columns = $0 }
+    }
+
+    /// Actions for several selected colors at once.
+    @ViewBuilder
+    private var selectionMenu: some View {
+        let selected = model.selectedItems
+        Button("Copy \(selected.count) Colors") { Clipboard.copy(selected.map { settings.string($0.color) }.joined(separator: "\n")) }
+        Button("New Palette from Selection") {
+            let id = library.createPalette(colors: selected)
+            model.source = .palette(id)
+            model.renaming = id
+        }
+        Menu("Add to Palette") {
+            ForEach(library.palettes.filter { !$0.isLocked && .palette($0.id) != source }) { palette in
+                Button(palette.name) { library.add(selected, to: .palette(palette.id)) }
+            }
+        }
+        if !locked {
+            Divider()
+            Button("Delete \(selected.count) Colors", role: .destructive) {
+                library.remove(model.selection, from: source)
+                model.selection = []
             }
         }
     }
@@ -491,22 +569,54 @@ struct PaletteDetail: View {
 
     /// ⌘-click toggles, ⇧-click extends, a plain click selects just this color.
     private func click(_ item: ColorItem) {
+        gridFocused = true
         let flags = NSEvent.modifierFlags
         if flags.contains(.command) {
             if model.selection.contains(item.id) { model.selection.remove(item.id) } else { model.selection.insert(item.id) }
+            anchor = item.id
         } else if flags.contains(.shift) {
             extendSelection(to: item)
         } else {
             model.selection = [item.id]
+            anchor = item.id
         }
+        cursor = item.id
     }
 
     private func extendSelection(to item: ColorItem) {
-        guard let anchor = items.firstIndex(where: { model.selection.contains($0.id) }), let end = items.firstIndex(of: item) else {
+        let list = visible
+        let start = list.firstIndex { $0.id == anchor } ?? list.firstIndex { model.selection.contains($0.id) }
+        guard let start, let end = list.firstIndex(of: item) else {
             model.selection = [item.id]
+            anchor = item.id
             return
         }
-        model.selection = Set(items[min(anchor, end)...max(anchor, end)].map(\.id))
+        model.selection = Set(list[min(start, end)...max(start, end)].map(\.id))
+    }
+
+    /// Arrow keys move the selection through the grid; with ⇧ they extend it. Returns the color now under the cursor.
+    private func moveCursor(_ press: KeyPress) -> UUID? {
+        let list = visible
+        guard !list.isEmpty else { return nil }
+        let step = switch press.key {
+        case .leftArrow: -1
+        case .rightArrow: 1
+        case .upArrow: -columns
+        default: columns
+        }
+        // The cursor only counts while it's still selected; something else may have changed the selection.
+        let current = list.firstIndex { $0.id == cursor && model.selection.contains($0.id) } ?? list.firstIndex { model.selection.contains($0.id) }
+        let index = current.map { min(max($0 + step, 0), list.count - 1) } ?? 0
+        let item = list[index]
+        if press.modifiers.contains(.shift) {
+            if anchor.map({ !model.selection.contains($0) }) ?? true { anchor = current.map { list[$0].id } ?? item.id }
+            extendSelection(to: item)
+        } else {
+            model.selection = [item.id]
+            anchor = item.id
+        }
+        cursor = item.id
+        return item.id
     }
 
     private func pasteColors() {
@@ -593,7 +703,7 @@ struct PaletteDetail: View {
 
             if let palette {
                 Menu {
-                    PaletteMenu(model: model, palette: palette, confirmDelete: $confirmDelete)
+                    PaletteMenu(model: model, palette: palette)
                 } label: {
                     Label("Palette", systemImage: "ellipsis.circle")
                 }
@@ -656,6 +766,9 @@ struct SwatchCell: View {
         }
         .contentShape(Rectangle())
         .help(item.note ?? item.displayName)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(item.displayName), \(item.color.hexString)")
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }
 }
 
@@ -718,7 +831,7 @@ struct ColorInspector: View {
             .textFieldStyle(.plain)
             .font(.title3.weight(.semibold))
             .disabled(locked)
-            TextField("Notes", text: Binding(get: { item.note ?? "" }, set: { value in
+            TextField("Add a note", text: Binding(get: { item.note ?? "" }, set: { value in
                 var updated = item
                 updated.note = value.isEmpty ? nil : value
                 library.update(updated, in: source)

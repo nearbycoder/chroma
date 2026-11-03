@@ -163,8 +163,8 @@ struct MenuPopover: View {
             }
             Spacer(minLength: 0)
             Button {
-                Clipboard.copy(settings.string(item.color))
                 close()
+                AppCoordinator.shared?.copy(item.color)
             } label: {
                 Image(systemName: "doc.on.doc")
             }
@@ -284,9 +284,12 @@ struct MenuPopover: View {
                     .frame(width: 24, height: 24)
                     .contentShape(Rectangle())
                     .help("\(item.displayName)  \(settings.string(item.color))")
+                    .accessibilityElement()
+                    .accessibilityLabel("\(item.displayName), \(item.color.hexString)")
+                    .accessibilityAddTraits(.isButton)
                     .onTapGesture {
-                        Clipboard.copy(settings.string(item.color))
                         close()
+                        AppCoordinator.shared?.copy(item.color)
                     }
                     .onDrag { ColorDrag.provider(for: [item], from: source) }
                     .contextMenu { ColorActions(item: item, source: source) }

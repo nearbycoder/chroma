@@ -21,6 +21,22 @@ struct Swatch: View {
     }
 }
 
+extension RGBColor {
+    /// A small rounded chip for menu items, which can't show SwiftUI views.
+    var menuSwatch: NSImage {
+        let image = NSImage(size: NSSize(width: 14, height: 14), flipped: false) { rect in
+            let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 3.5, yRadius: 3.5)
+            self.nsColor.setFill()
+            path.fill()
+            NSColor.black.withAlphaComponent(0.2).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+            return true
+        }
+        return image
+    }
+}
+
 struct Checkerboard: View {
     var square: CGFloat = 6
 
@@ -129,7 +145,7 @@ struct ToastView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Swatch(color: color, cornerRadius: 7)
+            Swatch(color: color, cornerRadius: 13) // round, to sit inside the capsule
                 .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
@@ -214,12 +230,12 @@ struct ColorActions: View {
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
-        Button("Copy \(settings.copyFormat.name)") { Clipboard.copy(settings.string(item.color)) }
+        Button("Copy \(settings.copyFormat.name)") { AppCoordinator.shared?.copy(item.color) }
         Menu("Copy As") {
             ForEach(FormatMenu.groups(settings.allFormats), id: \.0) { group, formats in
                 Section(group) {
                     ForEach(formats) { format in
-                        Button(format.name) { Clipboard.copy(settings.string(item.color, format: format)) }
+                        Button(format.name) { AppCoordinator.shared?.copy(item.color, format: format) }
                     }
                 }
             }

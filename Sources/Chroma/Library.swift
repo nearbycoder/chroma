@@ -115,6 +115,11 @@ final class LibraryStore: ObservableObject {
     private var lastWrite: Date?
     private var activeObserver: NSObjectProtocol?
     private(set) var fileURL: URL
+    /// Edits made in the library window, for Edit › Undo. Picks aren't undoable steps; undoing an
+    /// edit puts back the library from before it, then replays the picks made since.
+    let undoManager = UndoManager()
+    private var lastCheckpoint: (key: String, time: Date)?
+    private var pickLog: [(date: Date, item: ColorItem, palette: UUID?)] = []
 
     private init() {
         fileURL = Self.fileURL(in: AppSettings.shared.libraryFolder)
@@ -159,15 +164,23 @@ final class LibraryStore: ObservableObject {
     /// Records a picked color: first in History, and in the active palette if there is one.
     func recordPick(_ color: RGBColor) {
         let item = ColorItem(color: color)
+        apply(pick: item, palette: activePaletteID)
+        pickLog.append((Date(), item, activePaletteID))
+        if pickLog.count > 500 { pickLog.removeFirst(pickLog.count - 500) }
+        save()
+    }
+
+    private func apply(pick item: ColorItem, palette: UUID?) {
         history.removeAll { $0.color == item.color }
         history.insert(item, at: 0)
         let limit = AppSettings.shared.historyLimit
         if history.count > limit { history.removeLast(history.count - limit) }
-        if let id = activePaletteID, let index = palettes.firstIndex(where: { $0.id == id }), !palettes[index].isLocked,
+        if let palette, let index = palettes.firstIndex(where: { $0.id == palette }), !palettes[index].isLocked,
            !palettes[index].colors.contains(where: { $0.color == item.color }) {
-            palettes[index].colors.append(ColorItem(color: color))
+            var copy = ColorItem(color: item.color)
+            copy.added = item.added
+            palettes[index].colors.append(copy)
         }
-        save()
     }
 
     // MARK: Editing colors
@@ -184,11 +197,11 @@ final class LibraryStore: ObservableObject {
             return copy
         }
         guard !fresh.isEmpty else { return 0 }
-        mutate(source) { colors in
+        let added = mutate(source, action: fresh.count == 1 ? "Add Color" : "Add Colors") { colors in
             let index = min(position ?? colors.count, colors.count)
             colors.insert(contentsOf: fresh, at: index)
         }
-        return fresh.count
+        return added ? fresh.count : 0
     }
 
     @discardableResult
@@ -198,12 +211,13 @@ final class LibraryStore: ObservableObject {
 
     func remove(_ ids: Set<UUID>, from source: ColorSource) {
         guard !isLocked(source) else { return }
-        mutate(source) { $0.removeAll { ids.contains($0.id) } }
+        mutate(source, action: ids.count == 1 ? "Delete Color" : "Delete Colors") { $0.removeAll { ids.contains($0.id) } }
     }
 
     func update(_ item: ColorItem, in source: ColorSource) {
         guard !isLocked(source) else { return }
-        mutate(source) { colors in
+        // Dragging in the editor or typing a name is one undo step, not one per change.
+        mutate(source, action: "Edit Color", coalescing: "color-\(item.id)") { colors in
             guard let index = colors.firstIndex(where: { $0.id == item.id }) else { return }
             var updated = item
             updated.color = item.color.quantized
@@ -214,7 +228,7 @@ final class LibraryStore: ObservableObject {
     /// Moves colors (keeping their order) to sit before the color at `index`.
     func move(_ ids: [UUID], in source: ColorSource, to index: Int) {
         guard !isLocked(source) else { return }
-        mutate(source) { colors in
+        mutate(source, action: "Move") { colors in
             let moving = colors.filter { ids.contains($0.id) }
             let before = colors[..<min(index, colors.count)].filter { ids.contains($0.id) }.count
             colors.removeAll { ids.contains($0.id) }
@@ -224,7 +238,7 @@ final class LibraryStore: ObservableObject {
 
     func sort(_ source: ColorSource, by order: PaletteSort) {
         guard !isLocked(source) else { return }
-        mutate(source) { colors in
+        mutate(source, action: "Sort") { colors in
             switch order {
             case .hue:
                 // Grays last, then by hue.
@@ -244,26 +258,37 @@ final class LibraryStore: ObservableObject {
 
     func removeDuplicates(in source: ColorSource) {
         guard !isLocked(source) else { return }
-        mutate(source) { colors in
+        mutate(source, action: "Remove Duplicates") { colors in
             var seen = Set<RGBColor>()
             colors = colors.filter { seen.insert($0.color).inserted }
         }
     }
 
     func clearHistory() {
-        history.removeAll()
-        save()
+        mutate(.history, action: "Clear History") { $0.removeAll() }
     }
 
-    private func mutate(_ source: ColorSource, _ change: (inout [ColorItem]) -> Void) {
+    /// Changes the colors of History or a palette as one undo step. Returns false when nothing changed
+    /// (or the palette is gone), without recording a step.
+    @discardableResult
+    private func mutate(_ source: ColorSource, action: String, coalescing key: String? = nil, _ change: (inout [ColorItem]) -> Void) -> Bool {
+        var colors: [ColorItem]
         switch source {
-        case .history:
-            change(&history)
+        case .history: colors = history
         case .palette(let id):
-            guard let index = palettes.firstIndex(where: { $0.id == id }) else { return }
-            change(&palettes[index].colors)
+            guard let palette = palette(id) else { return false }
+            colors = palette.colors
+        }
+        let before = colors
+        change(&colors)
+        guard colors != before else { return false }
+        checkpoint(action, coalescing: key)
+        switch source {
+        case .history: history = colors
+        case .palette(let id): if let index = palettes.firstIndex(where: { $0.id == id }) { palettes[index].colors = colors }
         }
         save()
+        return true
     }
 
     // MARK: Palettes
@@ -271,21 +296,26 @@ final class LibraryStore: ObservableObject {
     @discardableResult
     func createPalette(name: String? = nil, colors: [ColorItem] = [], note: String = "") -> UUID {
         let palette = Palette(name: name ?? uniqueName("New Palette"), colors: colors, note: note)
+        checkpoint("New Palette")
         palettes.append(palette)
         save()
         return palette.id
     }
 
-    func updatePalette(_ id: UUID, _ change: (inout Palette) -> Void) {
+    func updatePalette(_ id: UUID, action: String = "Change Palette", _ change: (inout Palette) -> Void) {
         guard let index = palettes.firstIndex(where: { $0.id == id }) else { return }
-        change(&palettes[index])
+        var palette = palettes[index]
+        change(&palette)
+        guard palette != palettes[index] else { return }
+        checkpoint(action, coalescing: "\(action)-\(id)")
+        palettes[index] = palette
         save()
     }
 
     func rename(_ id: UUID, to name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        updatePalette(id) { $0.name = trimmed }
+        updatePalette(id, action: "Rename Palette") { $0.name = trimmed }
     }
 
     @discardableResult
@@ -296,19 +326,26 @@ final class LibraryStore: ObservableObject {
         copy.name = uniqueName(copy.name + " Copy")
         copy.isLocked = false
         copy.colors = copy.colors.map { var c = $0; c.id = UUID(); return c }
+        checkpoint("Duplicate Palette")
         palettes.insert(copy, at: index + 1)
         save()
         return copy.id
     }
 
     func deletePalette(_ id: UUID) {
+        guard palette(id) != nil else { return }
+        checkpoint("Delete Palette")
         palettes.removeAll { $0.id == id }
         if activePaletteID == id { activePaletteID = nil }
         save()
     }
 
     func movePalettes(from offsets: IndexSet, to destination: Int) {
-        palettes.move(fromOffsets: offsets, toOffset: destination)
+        var moved = palettes
+        moved.move(fromOffsets: offsets, toOffset: destination)
+        guard moved != palettes else { return }
+        checkpoint("Move Palette")
+        palettes = moved
         save()
     }
 
@@ -331,6 +368,45 @@ final class LibraryStore: ObservableObject {
     }
 
     var dockPalettes: [Palette] { palettes.filter(\.inDock) }
+
+    // MARK: Undo
+
+    private struct Snapshot {
+        let history: [ColorItem]
+        let palettes: [Palette]
+        let activePaletteID: UUID?
+        let taken = Date()
+    }
+
+    /// Records the library as it is before a change. Changes with the same `key` within a moment
+    /// (dragging a slider, typing) share one step.
+    private func checkpoint(_ action: String, coalescing key: String? = nil) {
+        let now = Date()
+        if let key, let last = lastCheckpoint, last.key == key, now.timeIntervalSince(last.time) < 1.5 {
+            lastCheckpoint = (key, now)
+            return
+        }
+        lastCheckpoint = key.map { ($0, now) }
+        register(Snapshot(history: history, palettes: palettes, activePaletteID: activePaletteID), action: action)
+    }
+
+    private func register(_ snapshot: Snapshot, action: String) {
+        undoManager.registerUndo(withTarget: self) { store in
+            // Registering the current state while undoing makes it the redo.
+            store.register(Snapshot(history: store.history, palettes: store.palettes, activePaletteID: store.activePaletteID), action: action)
+            store.history = snapshot.history
+            store.palettes = snapshot.palettes
+            store.activePaletteID = snapshot.activePaletteID
+            // Picks aren't steps of their own, so keep the ones made after the snapshot.
+            for pick in store.pickLog where pick.date > snapshot.taken {
+                store.apply(pick: pick.item, palette: pick.palette)
+            }
+            if let id = store.activePaletteID, store.palette(id) == nil { store.activePaletteID = nil }
+            store.lastCheckpoint = nil
+            store.save()
+        }
+        undoManager.setActionName(action)
+    }
 
     // MARK: Disk
 
@@ -369,6 +445,7 @@ final class LibraryStore: ObservableObject {
             history = file.history
             palettes = file.palettes
             lastWrite = modificationDate()
+            undoManager.removeAllActions() // the steps no longer match what's on disk
         } catch {
             // Keep a copy of a file we can't read rather than overwriting it.
             let backup = fileURL.deletingPathExtension().appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970)).json")
@@ -432,6 +509,7 @@ final class LibraryStore: ObservableObject {
 
     /// Replaces everything (used by the debug harness for screenshots).
     func replaceAll(history: [ColorItem], palettes: [Palette]) {
+        undoManager.removeAllActions()
         self.history = history
         self.palettes = palettes
     }

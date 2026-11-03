@@ -243,7 +243,7 @@ struct ContrastView: View {
     }
 }
 
-/// A swatch that opens an editor, a text field and an eyedropper.
+/// A swatch that opens an editor, a text field, an eyedropper and a menu of library colors.
 struct ColorWellRow: View {
     let title: String
     @Binding var color: RGBColor
@@ -274,19 +274,35 @@ struct ColorWellRow: View {
                 }
                 .help("Pick from the screen")
                 Menu {
-                    ForEach(LibraryStore.shared.history.prefix(12)) { item in
-                        Button {
-                            color = item.color
-                        } label: {
-                            Text("\(item.color.hexString)  \(item.displayName)")
+                    Section("Recent") {
+                        ForEach(LibraryStore.shared.history.prefix(12)) { colorButton($0) }
+                    }
+                    let palettes = LibraryStore.shared.palettes.filter { !$0.colors.isEmpty }
+                    if !palettes.isEmpty {
+                        Section("Palettes") {
+                            ForEach(palettes) { palette in
+                                Menu(palette.name) { ForEach(palette.colors) { colorButton($0) } }
+                            }
                         }
                     }
                 } label: {
-                    Image(systemName: "clock")
+                    Image(systemName: "swatchpalette")
                 }
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("Recent colors")
+                .help("Recent colors and palettes")
+            }
+        }
+    }
+
+    private func colorButton(_ item: ColorItem) -> some View {
+        Button {
+            color = item.color
+        } label: {
+            Label {
+                Text("\(item.displayName)  \(item.color.hexString)")
+            } icon: {
+                Image(nsImage: item.color.menuSwatch)
             }
         }
     }
